@@ -39,10 +39,10 @@ check_cmd () { command -v "$1" &>/dev/null; }
 
 case $(uname -m) in
     x86_64)
-        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.7.5/caddy_amd64
+        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.10.0/caddy_amd64
         ;;
     aarch64)
-        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.7.5/caddy_arm64
+        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.10.0/caddy_arm64
         ;;
     *) 
         echo "Error: Your system version does not support"
