@@ -14,11 +14,11 @@ jobs:
       - name: Set up Go for x86
         uses: actions/setup-go@v2
         with:
-          go-version: ^1.24
+          go-version: ^1.25
 
       - name: Install xcaddy for X86
         run: |
-          curl -L https://github.com/caddyserver/xcaddy/releases/download/v0.4.4/xcaddy_0.4.4_linux_amd64.tar.gz | tar -zx -C ${{ github.workspace }}
+          curl -L https://github.com/caddyserver/xcaddy/releases/download/v0.4.5/xcaddy_0.4.5_linux_amd64.tar.gz | tar -zx -C ${{ github.workspace }}
           export PATH=$PATH:${{ github.workspace }}
         env:
           GO111MODULE: "on"
