@@ -45,7 +45,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: 2.10.0
+          tag_name: 2.10.2
           release_name: caddy_trojan
           body: Release of caddy_trojan binaries.
           draft: false
