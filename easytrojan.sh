@@ -21,44 +21,190 @@
 #        rm -rf /etc/caddy /usr/local/bin/caddy /etc/systemd/system/caddy.service
 #
 
-trojan_passwd=$1
-caddy_domain=$2
-address_ip=$(curl ipv4.ip.sb)
+# ==================== Configuration ====================
+readonly CADDY_VERSION="2.11.2"
+readonly CADDY_BASE_URL="https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/${CADDY_VERSION}"
+readonly CADDY_BIN="/usr/local/bin/caddy"
+readonly CADDY_CONFIG_DIR="/etc/caddy"
+readonly CADDY_SERVICE_FILE="/etc/systemd/system/caddy.service"
+readonly TROJAN_DATA_DIR="/etc/caddy/trojan"
+readonly PASSWD_FILE="/etc/caddy/trojan/passwd.txt"
+readonly CADDY_USER="caddy"
+readonly REQUIRED_PORTS=(80 443)
+
+# ==================== Helper Functions ====================
+
+# Check if a command exists
+check_cmd() { command -v "$1" &>/dev/null; }
+
+# Log error message and exit
+log_error() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+# Log info message
+log_info() {
+    echo "[INFO] $1"
+}
+
+# Validate trojan password (only allow alphanumeric and underscore)
+validate_password() {
+    local passwd="$1"
+    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
+        log_error "Password must contain only letters, numbers, and underscores"
+    fi
+}
+
+# Get Caddy binary URL based on architecture
+get_caddy_url() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64) echo "${CADDY_BASE_URL}/caddy_amd64" ;;
+        aarch64) echo "${CADDY_BASE_URL}/caddy_arm64" ;;
+        *) log_error "Architecture $arch is not supported" ;;
+    esac
+}
+
+# Check if ports are available
+check_ports() {
+    local ports_in_use=()
+    for port in "${REQUIRED_PORTS[@]}"; do
+        if check_cmd ss; then
+            if ss -Hlnp "sport = :$port" 2>/dev/null | grep -q .; then
+                ports_in_use+=("$port")
+            fi
+        elif check_cmd netstat; then
+            if netstat -tlnp 2>/dev/null | grep -q ":$port "; then
+                ports_in_use+=("$port")
+            fi
+        else
+            log_error "Neither 'ss' nor 'netstat' command found"
+        fi
+    done
+    
+    if [ ${#ports_in_use[@]} -gt 0 ]; then
+        log_error "Ports ${ports_in_use[*]} are already in use"
+    fi
+}
+
+# Verify domain resolves to current server IP
+verify_domain_ip() {
+    local domain="$1"
+    local server_ip="$2"
+    local domain_ip
+    
+    domain_ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1; exit}')
+    
+    if [ -z "$domain_ip" ]; then
+        # Fallback to ping if getent fails
+        domain_ip=$(ping -c 1 -W 3 "$domain" 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1)
+    fi
+    
+    if [ "$domain_ip" != "$server_ip" ]; then
+        log_error "Domain $domain does not resolve to server IP $server_ip"
+    fi
+}
+
+# Add trojan user via Caddy API (safe JSON construction)
+add_trojan_user() {
+    local password="$1"
+    local response
+    local http_code
+    
+    response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        -d "{\"password\": \"$password\"}" \
+        "http://localhost:2019/trojan/users/add" 2>/dev/null)
+    
+    http_code=$(echo "$response" | tail -1)
+    
+    if [ "$http_code" != "200" ]; then
+        log_error "Failed to add trojan user via Caddy API"
+    fi
+}
+
+# Save password to file (with deduplication)
+save_password() {
+    local password="$1"
+    echo "$password" >> "$PASSWD_FILE"
+    sort "$PASSWD_FILE" | uniq > "${PASSWD_FILE}.tmp"
+    mv -f "${PASSWD_FILE}.tmp" "$PASSWD_FILE"
+}
+
+# Backup system configuration files
+backup_config() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        cp -f "$file" "${file}.bak.$(date +%Y%m%d%H%M%S)"
+        log_info "Backed up $file"
+    fi
+}
+
+# ==================== Main Script ====================
+
+# Parse arguments
+trojan_passwd="$1"
+caddy_domain="$2"
+
+# Validate inputs
+[ -z "$trojan_passwd" ] && log_error "You must enter a trojan password to run this script"
+validate_password "$trojan_passwd"
+[ "$(id -u)" != "0" ] && log_error "You must be root to run this script"
+
+# Get server IP
+address_ip=$(curl -s -4 ipv4.ip.sb 2>/dev/null)
+[ -z "$address_ip" ] && log_error "Failed to get server IP address"
+
+# Generate default domain from IP
 long_number=$(echo "$address_ip" | awk -F. '{printf "%u\n", $4 * 256^3 + $3 * 256^2 + $2 * 256 + $1}')
-nip_domain="ip$long_number.mobgslb.tbcache.com"
-trojan_link="trojan://$trojan_passwd@$address_ip:443?security=tls&sni=$nip_domain&alpn=h2%2Chttp%2F1.1&fp=chrome&type=tcp#easytrojan-$address_ip"
+nip_domain="ip${long_number}.mobgslb.tbcache.com"
+
+# Generate trojan connection link
+trojan_link="trojan://${trojan_passwd}@${address_ip}:443?security=tls&sni=${nip_domain}&alpn=h2%2Chttp%2F1.1&fp=chrome&type=tcp#easytrojan-${address_ip}"
 base64_link=$(echo -n "$trojan_link" | base64 -w 0)
-check_port=$(ss -Hlnp sport = :80 or sport = :443)
 
-[ "$trojan_passwd" = "" ] && { echo "Error: You must enter a trojan's password to run this script"; exit 1; }
-[ "$caddy_domain" != "" ] && domain_ip=$(ping "${caddy_domain}" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}') && [ "$domain_ip" != "$address_ip" ] && { echo "Error: Could not resolve hostname"; exit 1; }
-[ "$(id -u)" != "0" ] && { echo "Error: You must be root to run this script"; exit 1; }
-[ "$check_port" != "" ] && { echo "Error: Port 80 or 443 is already in use"; exit 1; }
+# Verify custom domain if provided
+if [ -n "$caddy_domain" ]; then
+    verify_domain_ip "$caddy_domain" "$address_ip"
+fi
 
-check_cmd () { command -v "$1" &>/dev/null; }
+# Check port availability
+check_ports
 
-case $(uname -m) in
-    x86_64)
-        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.11.2/caddy_amd64
-        ;;
-    aarch64)
-        caddy_url=https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/2.11.2/caddy_arm64
-        ;;
-    *) 
-        echo "Error: Your system version does not support"
-        exit 1
-        ;;
-esac
+# Get Caddy binary URL
+caddy_url=$(get_caddy_url)
 
-curl -L $caddy_url -o /usr/local/bin/caddy && chmod +x /usr/local/bin/caddy
+# Download and install Caddy
+log_info "Downloading Caddy server..."
+curl -L "$caddy_url" -o "$CADDY_BIN" || log_error "Failed to download Caddy"
+chmod +x "$CADDY_BIN"
 
-if ! id caddy &>/dev/null; then groupadd --system caddy; useradd --system -g caddy -s "$(command -v nologin)" caddy; fi
+# Verify Caddy installation
+if ! "$CADDY_BIN" version &>/dev/null; then
+    log_error "Caddy binary verification failed"
+fi
 
-mkdir -p /etc/caddy/trojan && chown -R caddy:caddy /etc/caddy && chmod 700 /etc/caddy
+# Create caddy system user if not exists
+if ! id "$CADDY_USER" &>/dev/null; then
+    groupadd --system "$CADDY_USER"
+    useradd --system -g "$CADDY_USER" -s "$(command -v nologin)" "$CADDY_USER"
+fi
 
-[ "$caddy_domain" != "" ] && nip_domain=$caddy_domain && rm -rf /etc/caddy/certificates
+# Create configuration directories
+mkdir -p "$TROJAN_DATA_DIR"
+chown -R "${CADDY_USER}:${CADDY_USER}" "$CADDY_CONFIG_DIR"
+chmod 700 "$CADDY_CONFIG_DIR"
 
-cat > /etc/caddy/Caddyfile <<EOF
+# Use custom domain if provided
+if [ -n "$caddy_domain" ]; then
+    nip_domain="$caddy_domain"
+    rm -rf "$CADDY_CONFIG_DIR/certificates"
+fi
+
+# Generate Caddyfile
+cat > "$CADDY_CONFIG_DIR/Caddyfile" <<EOF
 {
     order trojan before respond
     https_port 443
@@ -95,7 +241,8 @@ cat > /etc/caddy/Caddyfile <<EOF
 }
 EOF
 
-cat > /etc/systemd/system/caddy.service <<EOF
+# Generate systemd service file
+cat > "$CADDY_SERVICE_FILE" <<EOF
 [Unit]
 Description=Caddy
 Documentation=https://caddyserver.com/docs/
@@ -104,11 +251,11 @@ Requires=network-online.target
 
 [Service]
 Type=notify
-User=caddy
-Group=caddy
-Environment=XDG_CONFIG_HOME=/etc XDG_DATA_HOME=/etc
-ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
-ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+User=$CADDY_USER
+Group=$CADDY_USER
+Environment=XDG_CONFIG_HOME=$CADDY_CONFIG_DIR XDG_DATA_HOME=$CADDY_CONFIG_DIR
+ExecStart=$CADDY_BIN run --environ --config $CADDY_CONFIG_DIR/Caddyfile
+ExecReload=$CADDY_BIN reload --config $CADDY_CONFIG_DIR/Caddyfile --force
 TimeoutStopSec=5s
 LimitNOFILE=1048576
 LimitNPROC=512
@@ -119,23 +266,40 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 WantedBy=multi-user.target
 EOF
 
-if ip link show lo | grep -q DOWN; then ip link set lo up; fi
-systemctl daemon-reload && systemctl restart caddy.service && systemctl enable caddy.service
+# Ensure loopback interface is up
+if ip link show lo | grep -q DOWN; then
+    ip link set lo up
+fi
 
-curl -X POST -H "Content-Type: application/json" -d "{\"password\": \"$trojan_passwd\"}" http://localhost:2019/trojan/users/add
-echo "$trojan_passwd" >> /etc/caddy/trojan/passwd.txt && sort /etc/caddy/trojan/passwd.txt | uniq > /etc/caddy/trojan/passwd.tmp && mv -f /etc/caddy/trojan/passwd.tmp /etc/caddy/trojan/passwd.txt
+# Start Caddy service
+systemctl daemon-reload
+systemctl restart caddy.service
+systemctl enable caddy.service
 
-echo "Obtaining and Installing an SSL Certificate..."
+# Add trojan user and save password
+add_trojan_user "$trojan_passwd"
+mkdir -p "$TROJAN_DATA_DIR"
+save_password "$trojan_passwd"
+
+# Wait for SSL certificate
+log_info "Obtaining and installing SSL certificate..."
 count=0
 sslfail=0
-until [ -d /etc/caddy/certificates ]; do
-count=$((count + 1))
-sleep 3
-(( count > 20 )) && sslfail=1 && break
+until [ -d "$CADDY_CONFIG_DIR/certificates" ]; do
+    count=$((count + 1))
+    sleep 3
+    if [ "$count" -gt 20 ]; then
+        sslfail=1
+        break
+    fi
 done
 
-[ "$sslfail" = "1" ] && { echo "Certificate application failed, please check your server firewall and network settings"; exit 1; }
+if [ "$sslfail" = "1" ]; then
+    log_error "Certificate application failed. Please check your server firewall and network settings"
+fi
 
+# Backup and update system limits
+backup_config "/etc/security/limits.conf"
 sed -i '/^# End of file/,$d' /etc/security/limits.conf
 
 cat >> /etc/security/limits.conf <<EOF
@@ -148,68 +312,25 @@ cat >> /etc/security/limits.conf <<EOF
 *     hard   core      1048576
 *     hard   memlock   unlimited
 *     soft   memlock   unlimited
-
-root     soft   nofile    1048576
-root     hard   nofile    1048576
-root     soft   nproc     1048576
-root     hard   nproc     1048576
-root     soft   core      1048576
-root     hard   core      1048576
-root     hard   memlock   unlimited
-root     soft   memlock   unlimited
 EOF
 
-sed -i '/fs.file-max/d' /etc/sysctl.conf
-sed -i '/fs.inotify.max_user_instances/d' /etc/sysctl.conf
-sed -i '/net.core.somaxconn/d' /etc/sysctl.conf
-sed -i '/net.core.netdev_max_backlog/d' /etc/sysctl.conf
-sed -i '/net.core.rmem_max/d' /etc/sysctl.conf
-sed -i '/net.core.wmem_max/d' /etc/sysctl.conf
-sed -i '/net.ipv4.udp_rmem_min/d' /etc/sysctl.conf
-sed -i '/net.ipv4.udp_wmem_min/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_rmem/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_wmem/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_syncookies/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_fin_timeout/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_tw_reuse/d' /etc/sysctl.conf
-sed -i '/net.ipv4.ip_local_port_range/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_max_syn_backlog/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_max_tw_buckets/d' /etc/sysctl.conf
-sed -i '/net.ipv4.route.gc_timeout/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_syn_retries/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_synack_retries/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_timestamps/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_max_orphans/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_no_metrics_save/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_ecn/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_frto/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_mtu_probing/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_rfc1337/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_sack/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_fack/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_window_scaling/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_adv_win_scale/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_moderate_rcvbuf/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_keepalive_time/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_notsent_lowat/d' /etc/sysctl.conf
-sed -i '/net.ipv4.conf.all.route_localnet/d' /etc/sysctl.conf
-sed -i '/net.ipv4.ip_forward/d' /etc/sysctl.conf
-sed -i '/net.ipv4.conf.all.forwarding/d' /etc/sysctl.conf
-sed -i '/net.ipv4.conf.default.forwarding/d' /etc/sysctl.conf
-sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
-sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
+# Backup and update sysctl configuration
+backup_config "/etc/sysctl.conf"
 
-cat >> /etc/sysctl.conf << EOF
+# Remove old network tuning parameters
+sed -i '/^\(fs\.file-max\|fs\.inotify\|net\.\)/d' /etc/sysctl.conf
+
+cat >> /etc/sysctl.conf <<EOF
 fs.file-max = 1048576
 fs.inotify.max_user_instances = 8192
 net.core.somaxconn = 32768
 net.core.netdev_max_backlog = 32768
-net.core.rmem_max=33554432
-net.core.wmem_max=33554432
-net.ipv4.udp_rmem_min=8192
-net.ipv4.udp_wmem_min=8192
-net.ipv4.tcp_rmem=4096 87380 33554432
-net.ipv4.tcp_wmem=4096 16384 33554432
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.ipv4.udp_rmem_min = 8192
+net.ipv4.udp_wmem_min = 8192
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 16384 33554432
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_fin_timeout = 30
 net.ipv4.tcp_tw_reuse = 1
@@ -239,24 +360,29 @@ net.ipv4.conf.all.forwarding = 1
 net.ipv4.conf.default.forwarding = 1
 EOF
 
+# Enable BBR congestion control if available
 modprobe tcp_bbr &>/dev/null
-if grep -wq bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
-echo "net.core.default_qdisc = fq" >>/etc/sysctl.conf
-echo "net.ipv4.tcp_congestion_control = bbr" >>/etc/sysctl.conf
+if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
+    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
 fi
 
-sysctl -p > /dev/null
+# Apply sysctl settings
+sysctl -p > /dev/null 2>&1 || log_error "Failed to apply sysctl settings"
 
-check_http=$(curl -L http://"$nip_domain")
-[ "$check_http" != "Service Unavailable" ] && { echo "You have installed EasyTrojan 3.0,please enable TCP port 80 and 443"; exit 1; }
+# Verify installation
+check_http=$(curl -s -L "http://${nip_domain}" 2>/dev/null)
+if [ "$check_http" != "Service Unavailable" ]; then
+    log_error "Installation verification failed. Please ensure TCP ports 80 and 443 are open"
+fi
 
+# Display success message and connection details
 clear
-
 echo -e "You have successfully installed EasyTrojan 3.0"
-echo -e "You can view your Trojan client configuration with the command 'cat /etc/caddy/trojan.link'\n"
-echo -e "Trojan Address:" | tee /etc/caddy/trojan.link
-echo -e "$nip_domain | Port: 443 | Password: $trojan_passwd | Alpn: h2,http/1.1\n" | tee -a /etc/caddy/trojan.link
-echo -e "Trojan Link:" | tee -a /etc/caddy/trojan.link
-echo -e "$trojan_link\n" | tee -a /etc/caddy/trojan.link
-echo -e "You can share your Trojan link securely with the website:" | tee -a /etc/caddy/trojan.link
-echo -e "https://autoxtls.github.io/base64.html#$base64_link\n" | tee -a /etc/caddy/trojan.link
+echo -e "You can view your Trojan client configuration with the command 'cat $TROJAN_DATA_DIR/trojan.link'\n"
+echo -e "Trojan Address:" | tee "$TROJAN_DATA_DIR/trojan.link"
+echo -e "$nip_domain | Port: 443 | Password: $trojan_passwd | Alpn: h2,http/1.1\n" | tee -a "$TROJAN_DATA_DIR/trojan.link"
+echo -e "Trojan Link:" | tee -a "$TROJAN_DATA_DIR/trojan.link"
+echo -e "$trojan_link\n" | tee -a "$TROJAN_DATA_DIR/trojan.link"
+echo -e "You can share your Trojan link securely with the website:" | tee -a "$TROJAN_DATA_DIR/trojan.link"
+echo -e "https://autoxtls.github.io/base64.html#$base64_link\n" | tee -a "$TROJAN_DATA_DIR/trojan.link"
