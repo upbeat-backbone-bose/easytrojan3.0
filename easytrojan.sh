@@ -22,7 +22,7 @@
 #
 
 # ==================== Configuration ====================
-readonly CADDY_VERSION="2.11.2"
+readonly CADDY_VERSION="v2.11.2"
 readonly CADDY_BASE_URL="https://github.com/upbeat-backbone-bose/easytrojan3.0/releases/download/${CADDY_VERSION}"
 readonly CADDY_BIN="/usr/local/bin/caddy"
 readonly CADDY_CONFIG_DIR="/etc/caddy"

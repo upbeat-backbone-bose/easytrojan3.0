@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to publish (e.g. 2.11.2 or v2.11.2)'
+        description: 'Release tag to publish (e.g. v2.11.2)'
         required: false
         type: string
   push:
     tags:
-      - '*.*.*'
       - 'v*'
 
 permissions:
