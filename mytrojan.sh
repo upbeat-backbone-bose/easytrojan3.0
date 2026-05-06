@@ -21,25 +21,42 @@ check_root() {
     fi
 }
 
-# Validate password format (only letters, numbers, underscores)
+# Validate password format (reject control characters and empty value)
 validate_password() {
     local passwd="$1"
-    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        echo "Error: Password '$passwd' must contain only letters, numbers, and underscores" >&2
+    if [ -z "$passwd" ]; then
+        echo "Error: Password must not be empty" >&2
+        return 1
+    fi
+    if [[ "$passwd" =~ [[:cntrl:]] ]]; then
+        echo "Error: Password must not contain control characters" >&2
         return 1
     fi
     return 0
 }
 
+# Escape string for safe embedding in JSON value
+json_escape() {
+    local s="$1"
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\r'/\\r}
+    s=${s//$'\t'/\\t}
+    printf '%s' "$s"
+}
+
 # Add trojan user via Caddy API
 add_user() {
     local password="$1"
+    local escaped_password
     local response
     local http_code
 
+    escaped_password=$(json_escape "$password")
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
-        -d "{\"password\": \"$password\"}" \
+        -d "{\"password\":\"$escaped_password\"}" \
         "$CADDY_API/add" 2>/dev/null)
     
     http_code=$(echo "$response" | tail -1)
@@ -57,18 +74,23 @@ add_user() {
 # Delete trojan user via Caddy API
 del_user() {
     local password="$1"
+    local escaped_password
     local response
     local http_code
 
+    escaped_password=$(json_escape "$password")
     response=$(curl -s -w "\n%{http_code}" -X DELETE \
         -H "Content-Type: application/json" \
-        -d "{\"password\": \"$password\"}" \
+        -d "{\"password\":\"$escaped_password\"}" \
         "$CADDY_API/delete" 2>/dev/null)
     
     http_code=$(echo "$response" | tail -1)
 
     if [ "$http_code" = "200" ]; then
-        sed -i "/^${password}$/d" "$PASSWD_FILE"
+        if [ -f "$PASSWD_FILE" ]; then
+            grep -Fvx -- "$password" "$PASSWD_FILE" > "${PASSWD_FILE}.tmp" || true
+            mv -f "${PASSWD_FILE}.tmp" "$PASSWD_FILE"
+        fi
         echo "Delete Succeeded: $password"
     else
         echo "Delete Failed: $password (HTTP $http_code)"

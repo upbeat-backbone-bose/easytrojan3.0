@@ -2,8 +2,14 @@ name: Build and Publish Caddy for X86 and ARM
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to publish (e.g. 2.11.2 or v2.11.2)'
+        required: false
+        type: string
   push:
     tags:
+      - '*.*.*'
       - 'v*'
 
 permissions:
@@ -45,12 +51,12 @@ jobs:
             --output ${{ matrix.asset_name }}
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Caddy Trojan ${{ github.ref_name }}"
-          body: "Release of caddy-trojan binaries for ${{ github.ref_name }}.\n\nSupported architectures:\n- Linux amd64\n- Linux arm64"
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
+          name: "Caddy Trojan ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}"
+          body: "Release of caddy-trojan binaries for ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}.\n\nSupported architectures:\n- Linux amd64\n- Linux arm64"
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false

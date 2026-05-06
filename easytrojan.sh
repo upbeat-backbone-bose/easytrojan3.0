@@ -31,6 +31,8 @@ readonly TROJAN_DATA_DIR="/etc/caddy/trojan"
 readonly PASSWD_FILE="/etc/caddy/trojan/passwd.txt"
 readonly CADDY_USER="caddy"
 readonly REQUIRED_PORTS=(80 443)
+readonly SYSCTL_BEGIN_MARKER="# BEGIN EASYTROJAN SYSCTL"
+readonly SYSCTL_END_MARKER="# END EASYTROJAN SYSCTL"
 
 # ==================== Helper Functions ====================
 
@@ -48,12 +50,39 @@ log_info() {
     echo "[INFO] $1"
 }
 
-# Validate trojan password (only allow alphanumeric and underscore)
+# Validate trojan password (reject control characters and empty value)
 validate_password() {
     local passwd="$1"
-    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        log_error "Password must contain only letters, numbers, and underscores"
+    if [ -z "$passwd" ]; then
+        log_error "Password must not be empty"
     fi
+    if [[ "$passwd" =~ [[:cntrl:]] ]]; then
+        log_error "Password must not contain control characters"
+    fi
+}
+
+# Escape string for safe embedding in JSON value
+json_escape() {
+    local s="$1"
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\r'/\\r}
+    s=${s//$'\t'/\\t}
+    printf '%s' "$s"
+}
+
+url_encode() {
+    local s="$1"
+    local i
+    local ch
+    for ((i = 0; i < ${#s}; i++)); do
+        ch="${s:i:1}"
+        case "$ch" in
+            [a-zA-Z0-9.~_-]) printf '%s' "$ch" ;;
+            *) printf '%%%02X' "'$ch" ;;
+        esac
+    done
 }
 
 # Get Caddy binary URL based on architecture
@@ -89,20 +118,20 @@ check_ports() {
     fi
 }
 
-# Verify domain resolves to current server IP
+# Verify domain resolves to current server IPv4
 verify_domain_ip() {
     local domain="$1"
     local server_ip="$2"
-    local domain_ip
-    
-    domain_ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1; exit}')
-    
-    if [ -z "$domain_ip" ]; then
-        # Fallback to ping if getent fails
-        domain_ip=$(ping -c 1 -W 3 "$domain" 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1)
+    local domain_ips
+
+    domain_ips=$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | sort -u)
+
+    if [ -z "$domain_ips" ]; then
+        # Fallback to ping if getent is unavailable
+        domain_ips=$(ping -c 1 -W 3 "$domain" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     fi
-    
-    if [ "$domain_ip" != "$server_ip" ]; then
+
+    if [ -z "$domain_ips" ] || ! echo "$domain_ips" | grep -Fxq "$server_ip"; then
         log_error "Domain $domain does not resolve to server IP $server_ip"
     fi
 }
@@ -110,12 +139,14 @@ verify_domain_ip() {
 # Add trojan user via Caddy API (safe JSON construction)
 add_trojan_user() {
     local password="$1"
+    local escaped_password
     local response
     local http_code
-    
+
+    escaped_password=$(json_escape "$password")
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
-        -d "{\"password\": \"$password\"}" \
+        -d "{\"password\":\"$escaped_password\"}" \
         "http://localhost:2019/trojan/users/add" 2>/dev/null)
     
     http_code=$(echo "$response" | tail -1)
@@ -142,6 +173,70 @@ backup_config() {
     fi
 }
 
+write_sysctl_block() {
+    local tmp_file
+    tmp_file=$(mktemp) || log_error "Failed to create temporary file"
+
+    awk -v begin="$SYSCTL_BEGIN_MARKER" -v end="$SYSCTL_END_MARKER" '
+    $0==begin {skip=1; next}
+    $0==end {skip=0; next}
+    !skip {print}
+    ' /etc/sysctl.conf > "$tmp_file" || log_error "Failed to parse /etc/sysctl.conf"
+
+    cat >> "$tmp_file" <<EOF
+$SYSCTL_BEGIN_MARKER
+fs.file-max = 1048576
+fs.inotify.max_user_instances = 8192
+net.core.somaxconn = 32768
+net.core.netdev_max_backlog = 32768
+net.core.rmem_max = 33554432
+net.core.wmem_max = 33554432
+net.ipv4.udp_rmem_min = 8192
+net.ipv4.udp_wmem_min = 8192
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 16384 33554432
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.ip_local_port_range = 1024 65000
+net.ipv4.tcp_max_syn_backlog = 16384
+net.ipv4.tcp_max_tw_buckets = 6000
+net.ipv4.route.gc_timeout = 100
+net.ipv4.tcp_syn_retries = 1
+net.ipv4.tcp_synack_retries = 1
+net.ipv4.tcp_timestamps = 0
+net.ipv4.tcp_max_orphans = 32768
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_ecn = 0
+net.ipv4.tcp_frto = 0
+net.ipv4.tcp_mtu_probing = 0
+net.ipv4.tcp_rfc1337 = 0
+net.ipv4.tcp_sack = 1
+net.ipv4.tcp_fack = 1
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_adv_win_scale = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
+net.ipv4.tcp_keepalive_time = 600
+net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.conf.all.route_localnet = 1
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.forwarding = 1
+net.ipv4.conf.default.forwarding = 1
+EOF
+
+    modprobe tcp_bbr &>/dev/null
+    if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
+        cat >> "$tmp_file" <<EOF
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+    fi
+
+    echo "$SYSCTL_END_MARKER" >> "$tmp_file"
+    cat "$tmp_file" > /etc/sysctl.conf
+    rm -f "$tmp_file"
+}
+
 # ==================== Main Script ====================
 
 # Parse arguments
@@ -162,7 +257,7 @@ long_number=$(echo "$address_ip" | awk -F. '{printf "%u\n", $4 * 256^3 + $3 * 25
 nip_domain="ip${long_number}.mobgslb.tbcache.com"
 
 # Generate trojan connection link
-trojan_link="trojan://${trojan_passwd}@${address_ip}:443?security=tls&sni=${nip_domain}&alpn=h2%2Chttp%2F1.1&fp=chrome&type=tcp#easytrojan-${address_ip}"
+trojan_link="trojan://$(url_encode "$trojan_passwd")@${address_ip}:443?security=tls&sni=${nip_domain}&alpn=h2%2Chttp%2F1.1&fp=chrome&type=tcp#easytrojan-${address_ip}"
 base64_link=$(echo -n "$trojan_link" | base64 -w 0)
 
 # Verify custom domain if provided
@@ -316,56 +411,7 @@ EOF
 
 # Backup and update sysctl configuration
 backup_config "/etc/sysctl.conf"
-
-# Remove old network tuning parameters
-sed -i '/^\(fs\.file-max\|fs\.inotify\|net\.\)/d' /etc/sysctl.conf
-
-cat >> /etc/sysctl.conf <<EOF
-fs.file-max = 1048576
-fs.inotify.max_user_instances = 8192
-net.core.somaxconn = 32768
-net.core.netdev_max_backlog = 32768
-net.core.rmem_max = 33554432
-net.core.wmem_max = 33554432
-net.ipv4.udp_rmem_min = 8192
-net.ipv4.udp_wmem_min = 8192
-net.ipv4.tcp_rmem = 4096 87380 33554432
-net.ipv4.tcp_wmem = 4096 16384 33554432
-net.ipv4.tcp_syncookies = 1
-net.ipv4.tcp_fin_timeout = 30
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.ip_local_port_range = 1024 65000
-net.ipv4.tcp_max_syn_backlog = 16384
-net.ipv4.tcp_max_tw_buckets = 6000
-net.ipv4.route.gc_timeout = 100
-net.ipv4.tcp_syn_retries = 1
-net.ipv4.tcp_synack_retries = 1
-net.ipv4.tcp_timestamps = 0
-net.ipv4.tcp_max_orphans = 32768
-net.ipv4.tcp_no_metrics_save = 1
-net.ipv4.tcp_ecn = 0
-net.ipv4.tcp_frto = 0
-net.ipv4.tcp_mtu_probing = 0
-net.ipv4.tcp_rfc1337 = 0
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_fack = 1
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_adv_win_scale = 1
-net.ipv4.tcp_moderate_rcvbuf = 1
-net.ipv4.tcp_keepalive_time = 600
-net.ipv4.tcp_notsent_lowat = 16384
-net.ipv4.conf.all.route_localnet = 1
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.forwarding = 1
-net.ipv4.conf.default.forwarding = 1
-EOF
-
-# Enable BBR congestion control if available
-modprobe tcp_bbr &>/dev/null
-if grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control; then
-    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-fi
+write_sysctl_block
 
 # Apply sysctl settings
 sysctl -p > /dev/null 2>&1 || log_error "Failed to apply sysctl settings"
