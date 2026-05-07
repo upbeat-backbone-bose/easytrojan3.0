@@ -43,11 +43,13 @@ jobs:
           echo "### GitHub Actions 版本检查" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # 提取工作流中使用的 Actions
-          ACTIONS=$(grep -oP 'uses:\s+\K[^\s]+' .github/workflows/*.yml | sort -u)
+          # 提取工作流中使用的 Actions（去掉文件名前缀）
+          ACTIONS=$(grep -h 'uses:' .github/workflows/*.yml | grep -oP 'uses:\s+\K\S+' | sort -u)
 
           echo "| Action | 当前版本 | 最新版本 | 状态 |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|---------|---------|------|" >> $GITHUB_STEP_SUMMARY
+
+          outdated_count=0
 
           for action in $ACTIONS; do
             if [[ $action == *@* ]]; then
@@ -61,14 +63,21 @@ jobs:
                 latest=$(curl -s "https://api.github.com/repos/$name/tags?per_page=1" 2>/dev/null | grep '"name"' | head -1 | cut -d'"' -f4)
               fi
 
-              # 移除 v 前缀进行比较
-              version_num=${version#v}
-              latest_num=${latest#v}
-
-              if [ "$version_num" = "$latest_num" ]; then
-                status="✅ 最新"
+              # 处理 API 失败情况
+              if [ -z "$latest" ]; then
+                latest="获取失败"
+                status="❓ 未知"
               else
-                status="⚠️ 可升级到 $latest"
+                # 移除 v 前缀进行比较
+                version_num=${version#v}
+                latest_num=${latest#v}
+
+                if [ "$version_num" = "$latest_num" ]; then
+                  status="✅ 最新"
+                else
+                  status="⚠️ 可升级到 $latest"
+                  outdated_count=$((outdated_count + 1))
+                fi
               fi
 
               echo "| $name | $version | $latest | $status |" >> $GITHUB_STEP_SUMMARY
@@ -76,7 +85,11 @@ jobs:
           done
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 💡 提示：Dependabot 会自动创建更新 PR" >> $GITHUB_STEP_SUMMARY
+          if [ $outdated_count -gt 0 ]; then
+            echo "⚠️ 发现 $outdated_count 个 Action 可更新，Dependabot 将自动创建 PR" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ 所有 GitHub Actions 均为最新版本" >> $GITHUB_STEP_SUMMARY
+          fi
 
   check-scripts:
     name: Shell 脚本检查
