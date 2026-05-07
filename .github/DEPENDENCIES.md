@@ -2,7 +2,19 @@
 
 本文档说明 EasyTrojan 项目的依赖管理机制和自动化检查流程。
 
-## 📦 依赖类型
+## 📦 项目类型
+
+**EasyTrojan 是纯 Shell 脚本项目**，不是 Go 项目。
+
+| 组件 | 类型 | 说明 |
+|------|------|------|
+| easytrojan.sh | Shell 脚本 | 主安装脚本 |
+| mytrojan.sh | Shell 脚本 | 密码管理脚本 |
+| tests/*.sh | Shell 脚本 | 测试套件 |
+| xcaddy | Go 工具 | 仅用于构建 Caddy |
+| caddy-trojan | Go 插件 | 通过 xcaddy 远程获取 |
+
+## 🔧 依赖类型
 
 ### GitHub Actions
 项目使用以下 GitHub Actions：
@@ -10,18 +22,19 @@
 | Action | 版本 | 用途 |
 |--------|------|------|
 | actions/checkout | v6.0.2 | 代码检出 |
-| actions/setup-go | v6.4.0 | Go 环境设置 |
-| actions/cache | v5.0.5 | 构建缓存 |
+| actions/setup-go | v6.4.0 | Go 环境设置 (仅用于 xcaddy) |
+| actions/cache | v5.0.5 | xcaddy 缓存 |
 | actions/upload-artifact | v7.0.1 | 构建产物上传 |
 | actions/download-artifact | v8.0.1 | 构建产物下载 |
 | softprops/action-gh-release | v3.0.0 | GitHub Release 发布 |
 | ludeeus/action-shellcheck | 2.0.0 | Shell 脚本静态分析 |
 
-### Go 语言依赖
-主要依赖通过 xcaddy 构建时自动获取：
+### 构建工具
 
-- `github.com/caddyserver/caddy/v2` - Web 服务器核心
-- `github.com/imgk/caddy-trojan` - Trojan 协议插件
+**xcaddy** - Caddy 自定义构建工具
+- 版本：v0.4.5 (固定)
+- 用途：构建包含 caddy-trojan 插件的 Caddy
+- 位置：仅在 CI/CD 中使用
 
 ### 系统依赖（运行环境）
 - curl
@@ -38,13 +51,10 @@
 
 **检查范围：**
 - ✅ GitHub Actions 版本
-- ✅ Go 语言依赖
-- ✅ Docker 镜像（如有）
-- ✅ Devcontainer 配置（如有）
 
-**PR 限制：** 每个类别最多 5 个待处理 PR
+> 注意：由于项目是纯 Shell 脚本，没有 Go 模块依赖，因此 Dependabot 只检查 Actions 版本。
 
-### 工作流检查
+### 每周检查工作流
 
 **文件：** `.github/workflows/dependency-check.yml`
 
@@ -57,23 +67,19 @@
 1. **GitHub Actions 版本检查**
    - 对比当前版本与最新 release
    - 标记可更新的 Action
+   - 自动生成版本对比表
 
-2. **Go 依赖检查**
-   - Go 版本验证
-   - 列出所有依赖项
-   - 检查可更新的模块
-
-3. **Shell 脚本检查**
+2. **Shell 脚本检查**
    - ShellCheck 静态分析
-   - 脚本统计信息
+   - 脚本统计信息（行数、大小）
 
-4. **安全检查**
+3. **安全检查**
    - 硬编码密钥扫描
-   - 依赖漏洞检查
+   - 依赖安全性检查
 
-5. **构建验证**
-   - 编译测试
-   - 二进制文件验证
+4. **xcaddy 构建工具检查**
+   - 版本对比
+   - 构建产物说明
 
 **查看报告：**
 工作流完成后，在 GitHub Actions 页面查看 Summary 选项卡的详细报告。
@@ -84,7 +90,7 @@
 1. 进入 **Actions** 标签
 2. 选择 **Weekly Dependency Check** 工作流
 3. 点击 **Run workflow**
-4. 选择检查类型（all/actions/go/scripts）
+4. 选择检查类型（all/actions/scripts）
 5. 点击确定触发检查
 
 ## 🔄 更新依赖流程
@@ -96,15 +102,16 @@
 3. 运行 CI 测试
 4. 合并 PR
 
-### Go 依赖更新
+### xcaddy 更新
 
-1. Dependabot 创建 PR
-2. 本地测试构建：
+1. 检查每周检查报告的版本提示
+2. 修改 `.github/workflows/build.yml` 中的 `XCADDY_VERSION`
+3. 测试构建：
    ```bash
    xcaddy build --with github.com/imgk/caddy-trojan
    ```
-3. 确认测试通过
-4. 合并 PR
+4. 运行完整测试套件
+5. 提交更新
 
 ## 📊 版本策略
 
@@ -118,8 +125,8 @@
 ### 更新策略
 
 - **Actions:** 跟随最新 major 版本（如 v6.x）
-- **Go 模块:** 使用最新稳定版本
-- **xcaddy:** 固定版本（当前 v0.4.5）
+- **xcaddy:** 固定稳定版本（当前 v0.4.5）
+- **caddy-trojan:** 使用 xcaddy 自动获取最新版本
 
 ## 🛡️ 安全最佳实践
 
@@ -128,23 +135,24 @@
 3. **测试验证** - 确保 CI 通过
 4. **固定版本** - 避免使用 `master` 或 `main` 作为版本
 5. **Secret 管理** - 使用 GitHub Secrets，不要硬编码
+6. **ShellCheck 检查** - 每次提交自动进行静态分析
 
 ## 📈 监控指标
 
 建议关注：
 - Dependabot PR 数量（保持 < 5）
+- ShellCheck 警告数量
 - 构建时间变化
 - 安全检查结果
-- 测试覆盖率
 
 ## 🔗 相关资源
 
 - [Dependabot 文档](https://docs.github.com/en/code-security/dependabot)
 - [GitHub Actions 版本](https://github.com/actions)
-- [Go 模块管理](https://go.dev/ref/mod)
 - [xcaddy 构建工具](https://github.com/caddyserver/xcaddy)
+- [ShellCheck](https://www.shellcheck.net/)
 
 ---
 
-**最后更新:** 2026-05-07
+**最后更新:** 2026-05-07  
 **维护者:** EasyTrojan Team
