@@ -70,6 +70,7 @@ test_password_validation() {
     log_section "Password Validation Tests"
     
     # Test valid passwords (includes @, * and other special chars for backward compatibility)
+    # shellcheck disable=SC2016  # 故意使用单引号包含 $ 符号
     local valid_passwords=("password123" "test_password" "ABC123" "a1" "________" "AAAAAAAA" "12345678" 'test$123' "my-password" "pass.world" "hello[world]" "test{123}" "a|b" "x'y\"z" "p!ssw0rd" "test@domain*123" "hello@world" "pass*word")
     
     for passwd in "${valid_passwords[@]}"; do
