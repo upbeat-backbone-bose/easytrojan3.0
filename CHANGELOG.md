@@ -7,7 +7,8 @@
 ## [Unreleased]
 
 ### CI/CD
-- **ShellCheck 静态分析** - 添加 ludeeus/action-shellcheck@v2.0.0 进行 shell 脚本质量检查
+- **ShellCheck 静态分析** - 添加 ludeeus/action-shellcheck@2.0.0 (使用无 v 前缀版本)
+- **ShellCheck 配置** - 添加 .shellcheckrc 忽略 SC2155 (readonly 变量初始化误报)
 - **xcaddy 缓存** - 使用 actions/cache@v5.0.5 加速构建 (减少重复下载)
 - **二进制文件验证** - 构建后验证文件类型、权限、大小
 - **Release 合并优化** - 使用 upload/download-artifact 合并多架构到单一 Release
