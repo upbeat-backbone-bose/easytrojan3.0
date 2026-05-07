@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### CI/CD
+- **ShellCheck 静态分析** - 添加 ludeeus/action-shellcheck@v2.0.0 进行 shell 脚本质量检查
+- **xcaddy 缓存** - 使用 actions/cache@v5.0.5 加速构建 (减少重复下载)
+- **二进制文件验证** - 构建后验证文件类型、权限、大小
+- **Release 合并优化** - 使用 upload/download-artifact 合并多架构到单一 Release
+- **自动 Release Notes** - 动态嵌入 SHA256 校验和到 Release 描述
+- **Action 版本锁定** - 所有 Actions 使用最新固定版本 (checkout@v6.0.2, setup-go@v6.4.0, upload-artifact@v7.0.1, download-artifact@v8.0.1)
+- **权限增强** - 添加 security-events 用于安全扫描
+
+### 安全性
+- **密码验证强化** - 严格限制为 `^[a-zA-Z0-9_]+$`，删除 json_escape() 函数
+- **命令注入修复** - 移除不安全的 JSON 转义逻辑
+
 ### 测试
 - **audit.sh** - 添加 13 阶段本地审计脚本（语法、安全、API、幂等性、重试、配置、文档、Trojan Link 兼容性）
 - **test_quick.sh** - 8 项快速测试（语法、正则、函数、配置、幂等性、重试、文档）
@@ -18,10 +31,6 @@
 - **FAQ** - README 添加 7 个常见故障排查问题
 - **Trojan Link 兼容性** - 添加标准格式说明和 9 款客户端验证清单
 - **密码说明统一** - README 与实际验证逻辑一致（仅限字母数字下划线）
-
-### 安全性
-- **密码验证强化** - 严格限制为 `^[a-zA-Z0-9_]+$`，删除 json_escape() 函数
-- **命令注入修复** - 移除不安全的 JSON 转义逻辑
 
 ---
 
