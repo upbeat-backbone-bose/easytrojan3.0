@@ -48,10 +48,10 @@ done
 log_pass "未检测到危险命令模式"
 
 # 2.2 检查密码验证逻辑
-if grep -qE '\^\[a-zA-Z0-9_\]\+\$' "$SCRIPT_DIR/easytrojan.sh"; then
-    log_pass "密码验证正则为 ^[a-zA-Z0-9_]+$ (安全)"
+if grep -qF '[:@/?&#=]' "$SCRIPT_DIR/easytrojan.sh"; then
+    log_pass "密码验证排除 URI 结构字符 : @ / ? & = # (允许特殊符号)"
 else
-    log_fail "密码验证正则不符合预期"
+    log_fail "密码验证逻辑不符合预期"
 fi
 
 # 2.3 检查 json_escape 函数是否已删除（安全修复）
@@ -227,7 +227,7 @@ else
     log_fail "缺少空密码错误提示"
 fi
 
-if grep -qi "Error:.*Password.*format\|letters.*numbers.*underscore\|Password must contain only" "$SCRIPT_DIR/easytrojan.sh"; then
+if grep -qi "cannot contain.*URI\|URI characters\|Password cannot contain special" "$SCRIPT_DIR/easytrojan.sh"; then
     log_pass "包含密码格式错误提示"
 else
     log_fail "缺少密码格式错误提示"
@@ -239,7 +239,7 @@ log_info "第 9 阶段：文档完整性检查..."
 if [ -f "$SCRIPT_DIR/README.md" ]; then
     log_pass "README.md 存在"
     
-    if grep -q "字母.*数字.*下划线\|a-zA-Z0-9_" "$SCRIPT_DIR/README.md"; then
+    if grep -q "特殊符号\|URI 结构字符\|允许包含特殊" "$SCRIPT_DIR/README.md"; then
         log_pass "README 文档密码说明与实际逻辑一致"
     else
         log_fail "README 文档密码说明与实际逻辑不一致"

@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### 安全与密码规则
+- **密码规则放宽** - 允许特殊符号，仅排除 URI 结构字符 (`: @ / ? & = #` 和空格/制表符)
+- **向后兼容** - 支持已有客户端使用含特殊符号的密码
+- **URL 编码增强** - url_encode 函数确保所有特殊字符正确转义用于 Trojan Link
+- **错误消息优化** - 明确提示禁止的 URI 结构字符
+
 ### CI/CD
 - **ShellCheck 静态分析** - 添加 ludeeus/action-shellcheck@2.0.0 (使用无 v 前缀版本)
 - **ShellCheck 配置** - 添加 .shellcheckrc 忽略 SC2155 (readonly 变量初始化误报)

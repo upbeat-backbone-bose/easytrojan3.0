@@ -72,22 +72,23 @@ test_password_validation() {
     # Source the script to get functions
     # Note: We extract just the validate_password function for testing
     
-    # Test valid passwords
-    local valid_passwords=("password123" "test_password" "ABC123" "a1" "________" "AAAAAAAA" "12345678")
+    # Test valid passwords (now includes special characters, excludes URI structural chars)
+    local valid_passwords=("password123" "test_password" "ABC123" "a1" "________" "AAAAAAAA" "12345678" "test\$123" "my-password" "pass.word" "hello[world]" "test{123}" "a|b" "x'y\"z" "p!ssw0rd")
     
     for passwd in "${valid_passwords[@]}"; do
-        if echo "$passwd" | grep -qE '^[a-zA-Z0-9_]+$'; then
-            log_pass "Valid password accepted: $passwd"
+        # Check if password contains forbidden URI characters using grep
+        if echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
+            log_fail "Invalid password accepted (URI chars): '$passwd'"
         else
-            log_fail "Valid password rejected: $passwd"
+            log_pass "Valid password accepted: $passwd"
         fi
     done
     
-    # Test invalid passwords
-    local invalid_passwords=("" "pass word" "pass@word" "pass\$word" "pass-word" "pass.word" "密码" "tab	char")
+    # Test invalid passwords (URI structural characters and empty)
+    local invalid_passwords=("" "pass:word" "pass@word" "pass/word" "pass?word" "pass&word" "pass=word" "pass#word" "pass word" "tab	char")
     
     for passwd in "${invalid_passwords[@]}"; do
-        if [ -z "$passwd" ] || ! echo "$passwd" | grep -qE '^[a-zA-Z0-9_]+$'; then
+        if [ -z "$passwd" ] || echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
             log_pass "Invalid password rejected: '$passwd'"
         else
             log_fail "Invalid password accepted: '$passwd'"
@@ -178,21 +179,21 @@ test_config_variables() {
     done
 }
 
-# Test: Password validation regex pattern
+# Test: Password validation URI character check
 test_password_regex() {
-    log_section "Password Regex Pattern"
+    log_section "Password URI Character Check"
     
-    # Check if password validation pattern exists and is correct
-    if grep -qE '\^\[a-zA-Z0-9_\]\+\$' "$EASYTROJAN"; then
-        log_pass "easytrojan.sh has correct password regex pattern"
+    # Check if password validation uses grep to exclude URI structural characters
+    if grep -F '[:@/?&#=]' "$EASYTROJAN" >/dev/null; then
+        log_pass "easytrojan.sh correctly excludes URI structural characters"
     else
-        log_fail "easytrojan.sh password regex pattern is incorrect"
+        log_fail "easytrojan.sh URI character check is incorrect"
     fi
     
-    if grep -qE '\^\[a-zA-Z0-9_\]\+\$' "$MYTROJAN"; then
-        log_pass "mytrojan.sh has correct password regex pattern"
+    if grep -F '[:@/?&#=]' "$MYTROJAN" >/dev/null; then
+        log_pass "mytrojan.sh correctly excludes URI structural characters"
     else
-        log_fail "mytrojan.sh password regex pattern is incorrect"
+        log_fail "mytrojan.sh URI character check is incorrect"
     fi
 }
 
@@ -231,7 +232,7 @@ test_error_handling() {
         log_fail "easytrojan.sh missing empty password error"
     fi
     
-    if grep -qE "Password must contain only letters.*numbers.*underscore" "$EASYTROJAN"; then
+    if grep -q "Password cannot contain special URI characters" "$EASYTROJAN"; then
         log_pass "easytrojan.sh has password format error"
     else
         log_fail "easytrojan.sh missing password format error"
@@ -330,10 +331,10 @@ test_documentation() {
     fi
     
     # Check password policy documentation
-    if grep -qE "密码仅限使用字母.*数字.*下划线" "$readme"; then
+    if grep -qE "密码允许包含特殊符号|URI 结构字符" "$readme"; then
         log_pass "README documents password policy correctly"
     else
-        log_fail "README should document password policy (letters, numbers, underscore only)"
+        log_fail "README should document password policy (allow special chars, exclude URI chars)"
     fi
     
     # Check for FAQ section

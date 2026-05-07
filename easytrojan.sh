@@ -50,14 +50,15 @@ log_info() {
     echo "[INFO] $1"
 }
 
-# Validate trojan password (only allow letters, numbers, underscore)
+# Validate trojan password (allow special characters, exclude URI structural characters)
 validate_password() {
     local passwd="$1"
     if [ -z "$passwd" ]; then
         log_error "Password must not be empty"
     fi
-    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        log_error "Password must contain only letters (a-z, A-Z), numbers (0-9), and underscore (_)"
+    # Exclude URI structural characters: : @ / ? & = # and whitespace
+    if echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
+        log_error "Password cannot contain special URI characters: : @ / ? & = # or whitespace"
     fi
 }
 
