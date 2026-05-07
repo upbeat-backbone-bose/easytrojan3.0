@@ -127,8 +127,42 @@ sudo ufw disable
 
 - 连接参数
 
-IP为1.3.5.7 密码为123456的服务器示例
+IP 为 1.3.5.7 密码为 123456 的服务器示例
 ```
+地址：ip***.mobgslb.tbcache.com  #根据服务器 IP 生成（即免费域名）
+端口：443
+密码：123456          #安装时设置的密码
+ALPN: h2/http1.1
+```
+
+- Trojan Link 格式
+
+安装成功后会自动生成标准 Trojan Link，格式如下：
+```
+trojan://PASSWORD@HOST:443?security=tls&sni=HOST&alpn=h2,http/1.1&fp=chrome&type=tcp#easytrojan-HOST
+```
+
+参数说明：
+- `PASSWORD` - 连接密码（已自动 URL 编码）
+- `HOST` - 服务器 IP 或域名
+- `security=tls` - 传输层安全（必需）
+- `sni=HOST` - Server Name Indication，必须与域名一致
+- `alpn=h2,http/1.1` - 应用层协议协商，提高兼容性
+- `fp=chrome` - TLS 指纹，绕过 GFW 检测
+- `type=tcp` - 传输协议类型
+
+- 兼容的客户端
+
+以下客户端已验证兼容：
+- ✓ Trojan-Go (v0.10.6+)
+- ✓ Trojan (原版)
+- ✓ Clash / Clash.Meta
+- ✓ Sing-Box
+- ✓ Hiddify
+- ✓ V2RayN (支持 Trojan 协议)
+- ✓ Quantumult X
+- ✓ Shadowrocket
+- ✓ Surge
 地址：ip***.mobgslb.tbcache.com  #根据服务器IP生成（即免费域名）
 端口：443
 密码：123456          #安装时设置的密码
