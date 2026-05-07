@@ -6,11 +6,11 @@
 
 set -e
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/..
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m' # No Color
+readonly NC='\033[0m'
 
 log_pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
 log_fail() { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
@@ -390,7 +390,7 @@ else
 fi
 
 # 13.6 检查密码 URL 编码
-if grep -q '\$(url_encode.*trojan_passwd\|url_encode.*password' "$SCRIPT_DIR/easytrojan.sh"; then
+if grep -q 'url_encode.*trojan_passwd' "$SCRIPT_DIR/easytrojan.sh"; then
     log_pass "密码经过 URL 编码"
 else
     log_fail "密码未进行 URL 编码"

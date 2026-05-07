@@ -6,10 +6,10 @@
 
 set -e
 
-readonly TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$(dirname "$TESTS_DIR")"
-readonly EASYTROJAN="$PROJECT_ROOT/easytrojan.sh"
-readonly MYTROJAN="$PROJECT_ROOT/mytrojan.sh"
+readonly TESTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly PROJECT_ROOT=$(dirname "$TESTS_DIR")
+readonly EASYTROJAN=$PROJECT_ROOT/easytrojan.sh
+readonly MYTROJAN=$PROJECT_ROOT/mytrojan.sh
 
 # Colors for output
 readonly RED='\033[0;31m'

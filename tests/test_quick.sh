@@ -5,8 +5,8 @@
 
 set -e
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 
 echo "=== EasyTrojan Test Suite ==="
 echo "Date: $(date)"
