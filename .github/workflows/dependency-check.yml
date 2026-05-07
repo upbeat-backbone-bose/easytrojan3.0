@@ -16,6 +16,9 @@ on:
           - actions
           - scripts
 
+permissions:
+  contents: read
+
 env:
   XCADDY_VERSION: '0.4.5'
 
