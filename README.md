@@ -33,7 +33,7 @@ sudo ufw allow proto tcp from any to any port 80,443 && sudo iptables -F
 > 如果自动跳转至https，页面显示Service Unavailable，说明端口已放行
 
 #### 密码管理 ####
-密码建议使用字母、数字、下划线组合，长度不少于 8 位，避免使用特殊字符
+密码不能为空，不能包含控制字符。建议使用字母、数字、下划线组合，长度不少于 8 位
 ```
 # 下载 trojan 密码管理脚本
 curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
@@ -56,31 +56,6 @@ bash mytrojan.sh status password1 password2 ...
 # 流量归零
 bash mytrojan.sh rotate
 *流量统计归零后会自动在/etc/caddy/trojan/data 目录下生成历史记录
-
-# 密码列表
-bash mytrojan.sh list
-```
-# 下载trojan密码管理脚本
-curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
-
-# 创建密码
-bash mytrojan.sh add password
-
-# 一次创建多个密码示例
-bash mytrojan.sh add password1 password2 ...
-
-# 删除密码
-bash mytrojan.sh del password
-
-# 一次删除多个密码示例
-bash mytrojan.sh del password1 password2 ...
-
-# 流量查询
-bash mytrojan.sh status password1 password2 ...
-
-# 流量归零
-bash mytrojan.sh rotate
-*流量统计归零后会自动在/etc/caddy/trojan/data目录下生成历史记录
 
 # 密码列表
 bash mytrojan.sh list
@@ -192,7 +167,7 @@ ALPN: h2/http1.1
 **4. 密码添加/删除失败**
 - 确认 Caddy 服务正在运行：`systemctl status caddy.service`
 - 检查 API 是否可访问：`curl http://localhost:2019/trojan/users/list`
-- 密码避免使用特殊字符，仅使用字母、数字、下划线
+- 密码不能为空或包含控制字符
 
 **5. 流量统计异常**
 - 重启 Caddy 服务：`systemctl restart caddy.service`
