@@ -50,26 +50,15 @@ log_info() {
     echo "[INFO] $1"
 }
 
-# Validate trojan password (reject control characters and empty value)
+# Validate trojan password (only allow letters, numbers, underscore)
 validate_password() {
     local passwd="$1"
     if [ -z "$passwd" ]; then
         log_error "Password must not be empty"
     fi
-    if [[ "$passwd" =~ [[:cntrl:]] ]]; then
-        log_error "Password must not contain control characters"
+    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
+        log_error "Password must contain only letters (a-z, A-Z), numbers (0-9), and underscore (_)"
     fi
-}
-
-# Escape string for safe embedding in JSON value
-json_escape() {
-    local s="$1"
-    s=${s//\\/\\\\}
-    s=${s//\"/\\\"}
-    s=${s//$'\n'/\\n}
-    s=${s//$'\r'/\\r}
-    s=${s//$'\t'/\\t}
-    printf '%s' "$s"
 }
 
 url_encode() {
@@ -136,17 +125,15 @@ verify_domain_ip() {
     fi
 }
 
-# Add trojan user via Caddy API (safe JSON construction)
+# Add trojan user via Caddy API
 add_trojan_user() {
     local password="$1"
-    local escaped_password
     local response
     local http_code
 
-    escaped_password=$(json_escape "$password")
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
-        -d "{\"password\":\"$escaped_password\"}" \
+        -d "{\"password\":\"$password\"}" \
         "http://localhost:2019/trojan/users/add" 2>/dev/null)
     
     http_code=$(echo "$response" | tail -1)
