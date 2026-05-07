@@ -1,0 +1,79 @@
+version: 2
+registries:
+  golang-proxy:
+    type: go-proxy
+    url: https://proxy.golang.org
+
+updates:
+  # GitHub Actions 版本更新
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    reviewers:
+      - "autoxtls"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"
+
+  # Go 语言依赖更新
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    registries:
+      - golang-proxy
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "go"
+    reviewers:
+      - "autoxtls"
+    commit-message:
+      prefix: "chore(go)"
+      include: "scope"
+    groups:
+      go-production:
+        dependency-type: "production"
+      go-development:
+        dependency-type: "development"
+
+  # Shell 脚本安全检查 (通过检查 Dockerfile 间接实现)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
+
+  # 文档和配置文件更新
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "devcontainer"
+    commit-message:
+      prefix: "chore(devcontainer)"

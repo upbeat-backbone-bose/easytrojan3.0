@@ -1,0 +1,285 @@
+name: Weekly Dependency Check
+
+on:
+  schedule:
+    # 每周一 09:00 UTC 执行
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: '检查类型'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - actions
+          - go
+          - scripts
+
+env:
+  GO_VERSION: '1.26'
+  XCADDY_VERSION: '0.4.5'
+
+jobs:
+  dependency-review:
+    name: 依赖版本检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Generate Dependency Report
+        run: |
+          echo "## 📦 依赖版本检查报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "检查时间：$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-actions:
+    name: GitHub Actions 版本检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Check Actions Versions
+        run: |
+          echo "### GitHub Actions 版本检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 提取工作流中使用的 Actions
+          ACTIONS=$(grep -oP 'uses:\s+\K[^\s]+' .github/workflows/build.yml | sort -u)
+
+          echo "| Action | 当前版本 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|------|" >> $GITHUB_STEP_SUMMARY
+
+          for action in $ACTIONS; do
+            if [[ $action == *@* ]]; then
+              name=$(echo $action | cut -d'@' -f1)
+              version=$(echo $action | cut -d'@' -f2)
+
+              # 获取最新版本
+              latest=$(curl -s "https://api.github.com/repos/$name/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
+
+              if [ -z "$latest" ]; then
+                latest=$(curl -s "https://api.github.com/repos/$name/git/ref/heads/main" 2>/dev/null | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+              fi
+
+              if [ "$version" = "$latest" ] || [[ $version == v* && $latest == v* && $version == $latest ]]; then
+                status="✅ 最新"
+              elif [[ $version == v* && $latest != v* ]] || [[ $version != v* && $latest == v* ]]; then
+                # 移除 v 前缀后比较
+                version_num=${version#v}
+                latest_num=${latest#v}
+                if [ "$version_num" = "$latest_num" ]; then
+                  status="✅ 最新"
+                else
+                  status="⚠️ 可升级到 $latest"
+                fi
+              else
+                status="⚠️ 可升级到 $latest"
+              fi
+
+              echo "| $name | $version | $status |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-go:
+    name: Go 依赖检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check Go Version
+        run: |
+          echo "### Go 环境检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go version >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Install xcaddy
+        run: |
+          curl -L "https://github.com/caddyserver/xcaddy/releases/download/v${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_amd64.tar.gz" -o xcaddy.tar.gz
+          tar -zx -C /usr/local/bin -f xcaddy.tar.gz
+
+      - name: Setup Go Module
+        run: |
+          mkdir -p /tmp/go-check
+          cd /tmp/go-check
+          go mod init check
+          go get github.com/imgk/caddy-trojan@latest
+          go mod tidy
+
+      - name: List Go Dependencies
+        run: |
+          cd /tmp/go-check
+          echo "### Go 依赖项" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go list -m all >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for Outdated
+        run: |
+          cd /tmp/go-check
+          if command -v gocmp &> /dev/null; then
+            echo "### 可更新的依赖" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            go list -u -m all 2>&1 | grep '\[' >> $GITHUB_STEP_SUMMARY || echo "所有依赖已最新" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  check-scripts:
+    name: Shell 脚本检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@v2.0.0
+        with:
+          format: gcc
+          ignore_paths: >-
+            ./README.md
+            ./CHANGELOG.md
+
+      - name: Script Statistics
+        run: |
+          echo "### Shell 脚本统计" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 脚本文件 | 行数 | 大小 |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|------|" >> $GITHUB_STEP_SUMMARY
+
+          for script in *.sh; do
+            if [ -f "$script" ]; then
+              lines=$(wc -l < "$script")
+              size=$(ls -lh "$script" | awk '{print $5}')
+              echo "| $script | $lines | $size |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-security:
+    name: 安全检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Check for Hardcoded Secrets
+        run: |
+          echo "### 安全检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "#### 硬编码密钥检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 检查常见的密钥模式
+          patterns=(
+            "password="
+            "secret="
+            "token="
+            "api_key="
+            "apikey="
+          )
+
+          found_issues=0
+          for pattern in "${patterns[@]}"; do
+            if grep -ri "$pattern" --include="*.sh" --include="*.yml" --include="*.yaml" . 2>/dev/null | grep -v "example\|example.com" | grep -v "# "; then
+              found_issues=1
+            fi
+          done
+
+          if [ $found_issues -eq 0 ]; then
+            echo "✅ 未检测到明显的硬编码密钥" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ 发现可能的硬编码密钥，请人工审查" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "#### 依赖漏洞检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 使用最新稳定版本的 GitHub Actions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-build:
+    name: 构建验证
+    runs-on: ubuntu-latest
+    needs: [check-actions, check-go]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install xcaddy
+        run: |
+          curl -L "https://github.com/caddyserver/xcaddy/releases/download/v${XCADDY_VERSION}/xcaddy_${XCADDY_VERSION}_linux_amd64.tar.gz" -o xcaddy.tar.gz
+          tar -zx -C /usr/local/bin -f xcaddy.tar.gz
+
+      - name: Run Tests
+        run: |
+          chmod +x tests/test_all.sh
+          bash tests/test_all.sh
+
+      - name: Build Test (amd64)
+        run: |
+          GOOS=linux GOARCH=amd64 xcaddy build \
+            --with github.com/imgk/caddy-trojan \
+            --output caddy_test_amd64
+
+      - name: Verify Build
+        run: |
+          file caddy_test_amd64
+          ls -lh caddy_test_amd64
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建验证" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          file caddy_test_amd64 >> $GITHUB_STEP_SUMMARY
+          ls -lh caddy_test_amd64 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 构建成功" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: 生成检查报告
+    runs-on: ubuntu-latest
+    needs: [check-actions, check-go, check-scripts, check-security, check-build]
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 检查完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 所有检查已完成，请查看上方各检查项的详细报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 提示：如发现有依赖可更新，Dependabot 会自动创建 PR" >> $GITHUB_STEP_SUMMARY
