@@ -336,6 +336,7 @@ Requires=network-online.target
 Type=notify
 User=$CADDY_USER
 Group=$CADDY_USER
+Environment=XDG_CONFIG_HOME=/etc XDG_DATA_HOME=/etc
 ExecStart=$CADDY_BIN run --environ --config $CADDY_CONFIG_DIR/Caddyfile
 ExecReload=$CADDY_BIN reload --config $CADDY_CONFIG_DIR/Caddyfile --force
 TimeoutStopSec=5s
