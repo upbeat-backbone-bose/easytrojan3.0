@@ -49,10 +49,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
 
-      - name: Run tests
-        run: |
-          chmod +x tests/test_all.sh
-          bash tests/test_all.sh
+      - name: Set up Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version: '1.26'
 
       - name: Cache xcaddy
         uses: actions/cache@v5.0.5
@@ -61,6 +61,11 @@ jobs:
           key: xcaddy-${{ env.XCADDY_VERSION }}-${{ runner.os }}
           restore-keys: |
             xcaddy-${{ env.XCADDY_VERSION }}-${{ runner.os }}
+
+      - name: Run tests
+        run: |
+          chmod +x tests/test_all.sh
+          bash tests/test_all.sh
 
       - name: Install xcaddy
         run: |
