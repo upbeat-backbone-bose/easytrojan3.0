@@ -4,6 +4,27 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 测试
+- **audit.sh** - 添加 13 阶段本地审计脚本（语法、安全、API、幂等性、重试、配置、文档、Trojan Link 兼容性）
+- **test_quick.sh** - 8 项快速测试（语法、正则、函数、配置、幂等性、重试、文档）
+- **test_all.sh** - 58 项完整测试套件（12 个测试分类）
+- **tests/README.md** - 测试指南和故障排查文档
+- **CI 集成** - GitHub Actions 构建前自动运行测试
+
+### 文档
+- **CHANGELOG.md** - 添加版本变更记录
+- **FAQ** - README 添加 7 个常见故障排查问题
+- **Trojan Link 兼容性** - 添加标准格式说明和 9 款客户端验证清单
+- **密码说明统一** - README 与实际验证逻辑一致（仅限字母数字下划线）
+
+### 安全性
+- **密码验证强化** - 严格限制为 `^[a-zA-Z0-9_]+$`，删除 json_escape() 函数
+- **命令注入修复** - 移除不安全的 JSON 转义逻辑
+
+---
+
 ## [v2.11.2] - 2026-05-07
 
 ### 安全性
