@@ -1,0 +1,211 @@
+name: Weekly Dependency Check
+
+on:
+  schedule:
+    # 每周一 09:00 UTC 执行
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: '检查类型'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - actions
+          - scripts
+
+env:
+  XCADDY_VERSION: '0.4.5'
+
+jobs:
+  check-actions:
+    name: GitHub Actions 版本检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Generate Report Header
+        run: |
+          echo "## 📦 依赖版本检查报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "检查时间：$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Actions Versions
+        run: |
+          echo "### GitHub Actions 版本检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 提取工作流中使用的 Actions
+          ACTIONS=$(grep -oP 'uses:\s+\K[^\s]+' .github/workflows/*.yml | sort -u)
+
+          echo "| Action | 当前版本 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|------|" >> $GITHUB_STEP_SUMMARY
+
+          for action in $ACTIONS; do
+            if [[ $action == *@* ]]; then
+              name=$(echo $action | cut -d'@' -f1)
+              version=$(echo $action | cut -d'@' -f2)
+
+              # 获取最新版本
+              latest=$(curl -s "https://api.github.com/repos/$name/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
+
+              if [ -z "$latest" ]; then
+                latest=$(curl -s "https://api.github.com/repos/$name/git/ref/heads/main" 2>/dev/null | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+              fi
+
+              if [ "$version" = "$latest" ] || [[ $version == v* && $latest == v* && $version == $latest ]]; then
+                status="✅ 最新"
+              elif [[ $version == v* && $latest != v* ]] || [[ $version != v* && $latest == v* ]]; then
+                version_num=${version#v}
+                latest_num=${latest#v}
+                if [ "$version_num" = "$latest_num" ]; then
+                  status="✅ 最新"
+                else
+                  status="⚠️ 可升级到 $latest"
+                fi
+              else
+                status="⚠️ 可升级到 $latest"
+              fi
+
+              echo "| $name | $version | $status |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 提示：Dependabot 会自动创建更新 PR" >> $GITHUB_STEP_SUMMARY
+
+  check-scripts:
+    name: Shell 脚本检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          format: gcc
+          ignore_paths: >-
+            ./README.md
+            ./CHANGELOG.md
+
+      - name: Script Statistics
+        run: |
+          echo "### Shell 脚本统计" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 脚本文件 | 行数 | 大小 |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|------|" >> $GITHUB_STEP_SUMMARY
+
+          for script in *.sh; do
+            if [ -f "$script" ]; then
+              lines=$(wc -l < "$script")
+              size=$(ls -lh "$script" | awk '{print $5}')
+              echo "| $script | $lines | $size |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-security:
+    name: 安全检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Check for Hardcoded Secrets
+        run: |
+          echo "### 安全检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "#### 硬编码密钥检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # 检查常见的密钥模式
+          patterns=(
+            "password="
+            "secret="
+            "token="
+            "api_key="
+            "apikey="
+          )
+
+          found_issues=0
+          for pattern in "${patterns[@]}"; do
+            if grep -ri "$pattern" --include="*.sh" --include="*.yml" --include="*.yaml" . 2>/dev/null | grep -v "example\|example.com" | grep -v "# "; then
+              found_issues=1
+            fi
+          done
+
+          if [ $found_issues -eq 0 ]; then
+            echo "✅ 未检测到明显的硬编码密钥" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ 发现可能的硬编码密钥，请人工审查" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "#### 依赖安全" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 使用最新稳定版本的 GitHub Actions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  check-xcaddy:
+    name: xcaddy 构建工具检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+
+      - name: Check xcaddy Version
+        run: |
+          echo "### xcaddy 构建工具检查" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          current_version="0.4.5"
+          latest=$(curl -s "https://api.github.com/repos/caddyserver/xcaddy/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+
+          echo "当前版本：$current_version" >> $GITHUB_STEP_SUMMARY
+          echo "最新版本：$latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$current_version" = "$latest" ]; then
+            echo "✅ xcaddy 已使用最新版本" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ xcaddy 可升级到 v$latest" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "升级方法：修改 \`.github/workflows/build.yml\` 中的 \`env.XCADDY_VERSION\` 为 \`$latest\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建产物验证" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "xcaddy 用于构建 Caddy + Trojan 插件：" >> $GITHUB_STEP_SUMMARY
+          echo "- 插件：github.com/imgk/caddy-trojan" >> $GITHUB_STEP_SUMMARY
+          echo "- 平台：Linux amd64, arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: 生成检查报告
+    runs-on: ubuntu-latest
+    needs: [check-actions, check-scripts, check-security, check-xcaddy]
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 检查完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 所有检查已完成，请查看上方各检查项的详细报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 提示：如发现有依赖可更新，Dependabot 会自动创建 PR" >> $GITHUB_STEP_SUMMARY

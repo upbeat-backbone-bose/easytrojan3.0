@@ -50,26 +50,15 @@ log_info() {
     echo "[INFO] $1"
 }
 
-# Validate trojan password (reject control characters and empty value)
+# Validate trojan password (only allow letters, numbers, underscore)
 validate_password() {
     local passwd="$1"
     if [ -z "$passwd" ]; then
         log_error "Password must not be empty"
     fi
-    if [[ "$passwd" =~ [[:cntrl:]] ]]; then
-        log_error "Password must not contain control characters"
+    if [[ ! "$passwd" =~ ^[a-zA-Z0-9_]+$ ]]; then
+        log_error "Password must contain only letters (a-z, A-Z), numbers (0-9), and underscore (_)"
     fi
-}
-
-# Escape string for safe embedding in JSON value
-json_escape() {
-    local s="$1"
-    s=${s//\\/\\\\}
-    s=${s//\"/\\\"}
-    s=${s//$'\n'/\\n}
-    s=${s//$'\r'/\\r}
-    s=${s//$'\t'/\\t}
-    printf '%s' "$s"
 }
 
 url_encode() {
@@ -136,17 +125,15 @@ verify_domain_ip() {
     fi
 }
 
-# Add trojan user via Caddy API (safe JSON construction)
+# Add trojan user via Caddy API
 add_trojan_user() {
     local password="$1"
-    local escaped_password
     local response
     local http_code
 
-    escaped_password=$(json_escape "$password")
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
-        -d "{\"password\":\"$escaped_password\"}" \
+        -d "{\"password\":\"$password\"}" \
         "http://localhost:2019/trojan/users/add" 2>/dev/null)
     
     http_code=$(echo "$response" | tail -1)
@@ -393,11 +380,17 @@ if [ "$sslfail" = "1" ]; then
     log_error "Certificate application failed. Please check your server firewall and network settings"
 fi
 
-# Backup and update system limits
-backup_config "/etc/security/limits.conf"
-sed -i '/^# End of file/,$d' /etc/security/limits.conf
+# Check if limits.conf already contains EasyTrojan configuration
+limits_conf_already_configured() {
+    grep -q "soft   nofile    1048576" /etc/security/limits.conf 2>/dev/null
+}
 
-cat >> /etc/security/limits.conf <<EOF
+# Backup and update system limits
+if ! limits_conf_already_configured; then
+    backup_config "/etc/security/limits.conf"
+    sed -i '/^# End of file/,$d' /etc/security/limits.conf
+
+    cat >> /etc/security/limits.conf <<EOF
 # End of file
 *     soft   nofile    1048576
 *     hard   nofile    1048576
@@ -408,6 +401,10 @@ cat >> /etc/security/limits.conf <<EOF
 *     hard   memlock   unlimited
 *     soft   memlock   unlimited
 EOF
+    log_info "System limits configured"
+else
+    log_info "System limits already configured, skipping"
+fi
 
 # Backup and update sysctl configuration
 backup_config "/etc/sysctl.conf"
@@ -416,11 +413,31 @@ write_sysctl_block
 # Apply sysctl settings
 sysctl -p > /dev/null 2>&1 || log_error "Failed to apply sysctl settings"
 
-# Verify installation
-check_http=$(curl -s -L "http://${nip_domain}" 2>/dev/null)
-if [ "$check_http" != "Service Unavailable" ]; then
-    log_error "Installation verification failed. Please ensure TCP ports 80 and 443 are open"
+# Verify installation with retry logic
+log_info "Verifying installation..."
+verify_count=0
+verify_max=3
+verify_success=0
+
+while [ $verify_count -lt $verify_max ]; do
+    verify_count=$((verify_count + 1))
+    log_info "Verification attempt $verify_count of $verify_max..."
+    check_http=$(curl -s -L --connect-timeout 10 --max-time 30 "http://${nip_domain}" 2>/dev/null)
+    if [ "$check_http" = "Service Unavailable" ]; then
+        verify_success=1
+        break
+    fi
+    if [ $verify_count -lt $verify_max ]; then
+        log_info "Verification failed, retrying in 5 seconds..."
+        sleep 5
+    fi
+done
+
+if [ "$verify_success" != "1" ]; then
+    log_error "Installation verification failed after $verify_max attempts. Please ensure TCP ports 80 and 443 are open and firewall is properly configured"
 fi
+
+log_info "Installation verification successful"
 
 # Display success message and connection details
 clear

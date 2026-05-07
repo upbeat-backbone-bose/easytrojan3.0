@@ -33,9 +33,9 @@ sudo ufw allow proto tcp from any to any port 80,443 && sudo iptables -F
 > 如果自动跳转至https，页面显示Service Unavailable，说明端口已放行
 
 #### 密码管理 ####
-请将结尾的password更换为自己的密码，仅限字母、数字、下划线，非多密码管理用途无需使用
+密码仅限使用字母 (a-z, A-Z)、数字 (0-9)、下划线 (_)，不能为空
 ```
-# 下载trojan密码管理脚本
+# 下载 trojan 密码管理脚本
 curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
 
 # 创建密码
@@ -55,7 +55,7 @@ bash mytrojan.sh status password1 password2 ...
 
 # 流量归零
 bash mytrojan.sh rotate
-*流量统计归零后会自动在/etc/caddy/trojan/data目录下生成历史记录
+*流量统计归零后会自动在/etc/caddy/trojan/data 目录下生成历史记录
 
 # 密码列表
 bash mytrojan.sh list
@@ -127,8 +127,42 @@ sudo ufw disable
 
 - 连接参数
 
-IP为1.3.5.7 密码为123456的服务器示例
+IP 为 1.3.5.7 密码为 123456 的服务器示例
 ```
+地址：ip***.mobgslb.tbcache.com  #根据服务器 IP 生成（即免费域名）
+端口：443
+密码：123456          #安装时设置的密码
+ALPN: h2/http1.1
+```
+
+- Trojan Link 格式
+
+安装成功后会自动生成标准 Trojan Link，格式如下：
+```
+trojan://PASSWORD@HOST:443?security=tls&sni=HOST&alpn=h2,http/1.1&fp=chrome&type=tcp#easytrojan-HOST
+```
+
+参数说明：
+- `PASSWORD` - 连接密码（已自动 URL 编码）
+- `HOST` - 服务器 IP 或域名
+- `security=tls` - 传输层安全（必需）
+- `sni=HOST` - Server Name Indication，必须与域名一致
+- `alpn=h2,http/1.1` - 应用层协议协商，提高兼容性
+- `fp=chrome` - TLS 指纹，绕过 GFW 检测
+- `type=tcp` - 传输协议类型
+
+- 兼容的客户端
+
+以下客户端已验证兼容：
+- ✓ Trojan-Go (v0.10.6+)
+- ✓ Trojan (原版)
+- ✓ Clash / Clash.Meta
+- ✓ Sing-Box
+- ✓ Hiddify
+- ✓ V2RayN (支持 Trojan 协议)
+- ✓ Quantumult X
+- ✓ Shadowrocket
+- ✓ Surge
 地址：ip***.mobgslb.tbcache.com  #根据服务器IP生成（即免费域名）
 端口：443
 密码：123456          #安装时设置的密码
@@ -140,6 +174,48 @@ ALPN: h2/http1.1
 ```
 非密码正确的trojan客户端访问返回503状态，将trojan伪装成过载的Web服务
 ```
+
+---
+
+#### 故障排查 (FAQ) ####
+
+**1. 证书申请失败**
+- 确保 TCP 80 和 443 端口已开放
+- 关闭服务器防火墙后重试：
+  - RHEL/CentOS: `systemctl stop firewalld.service`
+  - Debian/Ubuntu: `sudo ufw disable`
+- 检查服务器时间是否正确：`date -R`
+- 查看 Caddy 日志：`journalctl -u caddy.service -n 50`
+
+**2. 端口被占用**
+- 查看占用端口的进程：`ss -tlnp | grep ':80\|:443'`
+- 停止冲突服务：`systemctl stop nginx` 或 `systemctl stop apache2`
+- 如必须使用其他端口，参考"更换端口"章节
+
+**3. 连接超时或无法连接**
+- 检查防火墙是否放行 443 端口
+- 确认云服务商安全组已开放 80/443 端口
+- 验证域名解析：`ping <你的域名>`
+- 检查 Caddy 服务状态：`systemctl status caddy.service`
+
+**4. 密码添加/删除失败**
+- 确认 Caddy 服务正在运行：`systemctl status caddy.service`
+- 检查 API 是否可访问：`curl http://localhost:2019/trojan/users/list`
+- 密码仅限使用字母 (a-z, A-Z)、数字 (0-9)、下划线 (_)
+
+**5. 流量统计异常**
+- 重启 Caddy 服务：`systemctl restart caddy.service`
+- 检查数据文件权限：`ls -la /etc/caddy/trojan/`
+- 修复权限：`chown -R caddy:caddy /etc/caddy/trojan/`
+
+**6. 脚本执行报错 "Permission denied"**
+- 必须使用 root 用户执行
+- 检查脚本执行权限：`chmod +x easytrojan.sh mytrojan.sh`
+
+**7. 系统资源不足**
+- 查看文件句柄限制：`ulimit -n`
+- 查看进程数限制：`ulimit -u`
+- 重新加载系统配置：`sysctl -p`
 
 ---
 

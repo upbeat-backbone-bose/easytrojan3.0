@@ -1,0 +1,3 @@
+# Ignore warning about declare and assign separately
+# This is safe in our context since we're setting readonly variables
+disable=SC2155
