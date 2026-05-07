@@ -33,7 +33,32 @@ sudo ufw allow proto tcp from any to any port 80,443 && sudo iptables -F
 > 如果自动跳转至https，页面显示Service Unavailable，说明端口已放行
 
 #### 密码管理 ####
-请将结尾的password更换为自己的密码，仅限字母、数字、下划线，非多密码管理用途无需使用
+密码建议使用字母、数字、下划线组合，长度不少于 8 位，避免使用特殊字符
+```
+# 下载 trojan 密码管理脚本
+curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
+
+# 创建密码
+bash mytrojan.sh add password
+
+# 一次创建多个密码示例
+bash mytrojan.sh add password1 password2 ...
+
+# 删除密码
+bash mytrojan.sh del password
+
+# 一次删除多个密码示例
+bash mytrojan.sh del password1 password2 ...
+
+# 流量查询
+bash mytrojan.sh status password1 password2 ...
+
+# 流量归零
+bash mytrojan.sh rotate
+*流量统计归零后会自动在/etc/caddy/trojan/data 目录下生成历史记录
+
+# 密码列表
+bash mytrojan.sh list
 ```
 # 下载trojan密码管理脚本
 curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
@@ -140,6 +165,48 @@ ALPN: h2/http1.1
 ```
 非密码正确的trojan客户端访问返回503状态，将trojan伪装成过载的Web服务
 ```
+
+---
+
+#### 故障排查 (FAQ) ####
+
+**1. 证书申请失败**
+- 确保 TCP 80 和 443 端口已开放
+- 关闭服务器防火墙后重试：
+  - RHEL/CentOS: `systemctl stop firewalld.service`
+  - Debian/Ubuntu: `sudo ufw disable`
+- 检查服务器时间是否正确：`date -R`
+- 查看 Caddy 日志：`journalctl -u caddy.service -n 50`
+
+**2. 端口被占用**
+- 查看占用端口的进程：`ss -tlnp | grep ':80\|:443'`
+- 停止冲突服务：`systemctl stop nginx` 或 `systemctl stop apache2`
+- 如必须使用其他端口，参考"更换端口"章节
+
+**3. 连接超时或无法连接**
+- 检查防火墙是否放行 443 端口
+- 确认云服务商安全组已开放 80/443 端口
+- 验证域名解析：`ping <你的域名>`
+- 检查 Caddy 服务状态：`systemctl status caddy.service`
+
+**4. 密码添加/删除失败**
+- 确认 Caddy 服务正在运行：`systemctl status caddy.service`
+- 检查 API 是否可访问：`curl http://localhost:2019/trojan/users/list`
+- 密码避免使用特殊字符，仅使用字母、数字、下划线
+
+**5. 流量统计异常**
+- 重启 Caddy 服务：`systemctl restart caddy.service`
+- 检查数据文件权限：`ls -la /etc/caddy/trojan/`
+- 修复权限：`chown -R caddy:caddy /etc/caddy/trojan/`
+
+**6. 脚本执行报错 "Permission denied"**
+- 必须使用 root 用户执行
+- 检查脚本执行权限：`chmod +x easytrojan.sh mytrojan.sh`
+
+**7. 系统资源不足**
+- 查看文件句柄限制：`ulimit -n`
+- 查看进程数限制：`ulimit -u`
+- 重新加载系统配置：`sysctl -p`
 
 ---
 

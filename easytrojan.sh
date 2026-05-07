@@ -393,11 +393,17 @@ if [ "$sslfail" = "1" ]; then
     log_error "Certificate application failed. Please check your server firewall and network settings"
 fi
 
-# Backup and update system limits
-backup_config "/etc/security/limits.conf"
-sed -i '/^# End of file/,$d' /etc/security/limits.conf
+# Check if limits.conf already contains EasyTrojan configuration
+limits_conf_already_configured() {
+    grep -q "soft   nofile    1048576" /etc/security/limits.conf 2>/dev/null
+}
 
-cat >> /etc/security/limits.conf <<EOF
+# Backup and update system limits
+if ! limits_conf_already_configured; then
+    backup_config "/etc/security/limits.conf"
+    sed -i '/^# End of file/,$d' /etc/security/limits.conf
+
+    cat >> /etc/security/limits.conf <<EOF
 # End of file
 *     soft   nofile    1048576
 *     hard   nofile    1048576
@@ -408,6 +414,10 @@ cat >> /etc/security/limits.conf <<EOF
 *     hard   memlock   unlimited
 *     soft   memlock   unlimited
 EOF
+    log_info "System limits configured"
+else
+    log_info "System limits already configured, skipping"
+fi
 
 # Backup and update sysctl configuration
 backup_config "/etc/sysctl.conf"
@@ -416,11 +426,31 @@ write_sysctl_block
 # Apply sysctl settings
 sysctl -p > /dev/null 2>&1 || log_error "Failed to apply sysctl settings"
 
-# Verify installation
-check_http=$(curl -s -L "http://${nip_domain}" 2>/dev/null)
-if [ "$check_http" != "Service Unavailable" ]; then
-    log_error "Installation verification failed. Please ensure TCP ports 80 and 443 are open"
+# Verify installation with retry logic
+log_info "Verifying installation..."
+verify_count=0
+verify_max=3
+verify_success=0
+
+while [ $verify_count -lt $verify_max ]; do
+    verify_count=$((verify_count + 1))
+    log_info "Verification attempt $verify_count of $verify_max..."
+    check_http=$(curl -s -L --connect-timeout 10 --max-time 30 "http://${nip_domain}" 2>/dev/null)
+    if [ "$check_http" = "Service Unavailable" ]; then
+        verify_success=1
+        break
+    fi
+    if [ $verify_count -lt $verify_max ]; then
+        log_info "Verification failed, retrying in 5 seconds..."
+        sleep 5
+    fi
+done
+
+if [ "$verify_success" != "1" ]; then
+    log_error "Installation verification failed after $verify_max attempts. Please ensure TCP ports 80 and 443 are open and firewall is properly configured"
 fi
+
+log_info "Installation verification successful"
 
 # Display success message and connection details
 clear
