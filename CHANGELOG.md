@@ -14,10 +14,8 @@
 - **自动 Release Notes** - 动态嵌入 SHA256 校验和到 Release 描述
 - **Action 版本锁定** - 所有 Actions 使用最新固定版本 (checkout@v6.0.2, setup-go@v6.4.0, upload-artifact@v7.0.1, download-artifact@v8.0.1)
 - **权限增强** - 添加 security-events 用于安全扫描
-
-### 安全性
-- **密码验证强化** - 严格限制为 `^[a-zA-Z0-9_]+$`，删除 json_escape() 函数
-- **命令注入修复** - 移除不安全的 JSON 转义逻辑
+- **Dependabot 自动化** - 每周一检查依赖更新 (Actions, Go, Docker)
+- **每周依赖检查** - 自动检查 Actions 版本、Go 依赖、ShellCheck、安全、构建验证
 
 ### 测试
 - **audit.sh** - 添加 13 阶段本地审计脚本（语法、安全、API、幂等性、重试、配置、文档、Trojan Link 兼容性）
@@ -31,6 +29,11 @@
 - **FAQ** - README 添加 7 个常见故障排查问题
 - **Trojan Link 兼容性** - 添加标准格式说明和 9 款客户端验证清单
 - **密码说明统一** - README 与实际验证逻辑一致（仅限字母数字下划线）
+- **DEPENDENCIES.md** - 依赖管理指南
+
+### 安全性
+- **密码验证强化** - 严格限制为 `^[a-zA-Z0-9_]+$`，删除 json_escape() 函数
+- **命令注入修复** - 移除不安全的 JSON 转义逻辑
 
 ---
 
