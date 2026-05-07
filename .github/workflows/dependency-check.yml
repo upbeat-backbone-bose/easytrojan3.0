@@ -46,8 +46,8 @@ jobs:
           # 提取工作流中使用的 Actions
           ACTIONS=$(grep -oP 'uses:\s+\K[^\s]+' .github/workflows/*.yml | sort -u)
 
-          echo "| Action | 当前版本 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|---------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | 当前版本 | 最新版本 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|---------|------|" >> $GITHUB_STEP_SUMMARY
 
           for action in $ACTIONS; do
             if [[ $action == *@* ]]; then
@@ -58,24 +58,20 @@ jobs:
               latest=$(curl -s "https://api.github.com/repos/$name/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4)
 
               if [ -z "$latest" ]; then
-                latest=$(curl -s "https://api.github.com/repos/$name/git/ref/heads/main" 2>/dev/null | grep '"sha"' | head -1 | cut -d'"' -f4 | cut -c1-7)
+                latest=$(curl -s "https://api.github.com/repos/$name/tags?per_page=1" 2>/dev/null | grep '"name"' | head -1 | cut -d'"' -f4)
               fi
 
-              if [ "$version" = "$latest" ] || [[ $version == v* && $latest == v* && $version == $latest ]]; then
+              # 移除 v 前缀进行比较
+              version_num=${version#v}
+              latest_num=${latest#v}
+
+              if [ "$version_num" = "$latest_num" ]; then
                 status="✅ 最新"
-              elif [[ $version == v* && $latest != v* ]] || [[ $version != v* && $latest == v* ]]; then
-                version_num=${version#v}
-                latest_num=${latest#v}
-                if [ "$version_num" = "$latest_num" ]; then
-                  status="✅ 最新"
-                else
-                  status="⚠️ 可升级到 $latest"
-                fi
               else
                 status="⚠️ 可升级到 $latest"
               fi
 
-              echo "| $name | $version | $status |" >> $GITHUB_STEP_SUMMARY
+              echo "| $name | $version | $latest | $status |" >> $GITHUB_STEP_SUMMARY
             fi
           done
 
