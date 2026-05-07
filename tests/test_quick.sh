@@ -19,14 +19,14 @@ bash -n "$PROJECT_ROOT/mytrojan.sh" && echo "  ✓ mytrojan.sh syntax OK"
 
 # Test 2: Password URI character check
 echo "[2/8] Password validation URI character check..."
-if grep -F '[:@/?&#=]' "$PROJECT_ROOT/easytrojan.sh" >/dev/null; then
+if grep -F '[/?=#]' "$PROJECT_ROOT/easytrojan.sh" >/dev/null; then
     echo "  ✓ easytrojan.sh password validation OK"
 else
     echo "  ✗ easytrojan.sh password validation FAIL"
     exit 1
 fi
 
-if grep -F '[:@/?&#=]' "$PROJECT_ROOT/mytrojan.sh" >/dev/null; then
+if grep -F '[/?=#]' "$PROJECT_ROOT/mytrojan.sh" >/dev/null; then
     echo "  ✓ mytrojan.sh password validation OK"
 else
     echo "  ✗ mytrojan.sh password validation FAIL"
@@ -98,7 +98,7 @@ fi
 
 # Test 8: Documentation
 echo "[8/8] Documentation..."
-if grep -qE "密码允许包含特殊符号|URI 结构字符|:@\?&#=" "$PROJECT_ROOT/README.md"; then
+if grep -qE "密码允许包含特殊符号|@.*\*|URI 结构字符" "$PROJECT_ROOT/README.md"; then
     echo "  ✓ README password policy documented"
 else
     echo "  ✗ README password policy documentation missing"

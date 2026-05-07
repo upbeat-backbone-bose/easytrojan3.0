@@ -33,7 +33,7 @@ sudo ufw allow proto tcp from any to any port 80,443 && sudo iptables -F
 > 如果自动跳转至https，页面显示Service Unavailable，说明端口已放行
 
 #### 密码管理 ####
-密码允许包含特殊符号，但不能为空。以下字符不可使用：`:` `@` `/` `?` `&` `=` `#` 以及空格/制表符（URI 结构字符）
+密码允许包含特殊符号（包括 `@` 和 `*`），但不能为空。以下字符不可使用：`/` `?` `=` `#` 以及空格/制表符（URI 结构字符）。密码中的 `@` 和 `*` 等特殊符号会在生成 Trojan Link 时自动 URL 编码。
 ```
 # 下载 trojan 密码管理脚本
 curl https://raw.githubusercontent.com/upbeat-backbone-bose/easytrojan3.0/main/mytrojan.sh -o mytrojan.sh && chmod +x mytrojan.sh
@@ -201,7 +201,7 @@ ALPN: h2/http1.1
 **4. 密码添加/删除失败**
 - 确认 Caddy 服务正在运行：`systemctl status caddy.service`
 - 检查 API 是否可访问：`curl http://localhost:2019/trojan/users/list`
-- 密码不能包含 URI 结构字符：`:` `@` `/` `?` `&` `=` `#` 或空格/制表符
+- 密码不能包含 URI 结构字符：`/` `?` `=` `#` 或空格/制表符（允许使用 @ 和 *）
 
 **5. 流量统计异常**
 - 重启 Caddy 服务：`systemctl restart caddy.service`

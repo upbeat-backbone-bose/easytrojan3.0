@@ -69,15 +69,12 @@ test_syntax_validation() {
 test_password_validation() {
     log_section "Password Validation Tests"
     
-    # Source the script to get functions
-    # Note: We extract just the validate_password function for testing
-    
-    # Test valid passwords (now includes special characters, excludes URI structural chars)
-    local valid_passwords=("password123" "test_password" "ABC123" "a1" "________" "AAAAAAAA" "12345678" "test\$123" "my-password" "pass.word" "hello[world]" "test{123}" "a|b" "x'y\"z" "p!ssw0rd")
+    # Test valid passwords (includes @, * and other special chars for backward compatibility)
+    local valid_passwords=("password123" "test_password" "ABC123" "a1" "________" "AAAAAAAA" "12345678" 'test$123' "my-password" "pass.world" "hello[world]" "test{123}" "a|b" "x'y\"z" "p!ssw0rd" "test@domain*123" "hello@world" "pass*word")
     
     for passwd in "${valid_passwords[@]}"; do
         # Check if password contains forbidden URI characters using grep
-        if echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
+        if echo "$passwd" | grep -qE '[/?=#]|[[:space:]]'; then
             log_fail "Invalid password accepted (URI chars): '$passwd'"
         else
             log_pass "Valid password accepted: $passwd"
@@ -85,10 +82,10 @@ test_password_validation() {
     done
     
     # Test invalid passwords (URI structural characters and empty)
-    local invalid_passwords=("" "pass:word" "pass@word" "pass/word" "pass?word" "pass&word" "pass=word" "pass#word" "pass word" "tab	char")
+    local invalid_passwords=("" "pass/word" "pass?word" "pass=word" "pass#word" "pass word" "tab	char")
     
     for passwd in "${invalid_passwords[@]}"; do
-        if [ -z "$passwd" ] || echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
+        if [ -z "$passwd" ] || echo "$passwd" | grep -qE '[/?=#]|[[:space:]]'; then
             log_pass "Invalid password rejected: '$passwd'"
         else
             log_fail "Invalid password accepted: '$passwd'"
@@ -184,13 +181,13 @@ test_password_regex() {
     log_section "Password URI Character Check"
     
     # Check if password validation uses grep to exclude URI structural characters
-    if grep -F '[:@/?&#=]' "$EASYTROJAN" >/dev/null; then
+    if grep -F '[/?=#]' "$EASYTROJAN" >/dev/null; then
         log_pass "easytrojan.sh correctly excludes URI structural characters"
     else
         log_fail "easytrojan.sh URI character check is incorrect"
     fi
     
-    if grep -F '[:@/?&#=]' "$MYTROJAN" >/dev/null; then
+    if grep -F '[/?=#]' "$MYTROJAN" >/dev/null; then
         log_pass "mytrojan.sh correctly excludes URI structural characters"
     else
         log_fail "mytrojan.sh URI character check is incorrect"
@@ -232,7 +229,7 @@ test_error_handling() {
         log_fail "easytrojan.sh missing empty password error"
     fi
     
-    if grep -q "Password cannot contain special URI characters" "$EASYTROJAN"; then
+    if grep -q "cannot contain.*URI\|URI characters\|Password cannot contain special" "$EASYTROJAN"; then
         log_pass "easytrojan.sh has password format error"
     else
         log_fail "easytrojan.sh missing password format error"

@@ -48,8 +48,8 @@ done
 log_pass "未检测到危险命令模式"
 
 # 2.2 检查密码验证逻辑
-if grep -qF '[:@/?&#=]' "$SCRIPT_DIR/easytrojan.sh"; then
-    log_pass "密码验证排除 URI 结构字符 : @ / ? & = # (允许特殊符号)"
+if grep -qF '[/?=#]' "$SCRIPT_DIR/easytrojan.sh"; then
+    log_pass "密码验证排除 URI 结构字符 / ? = # (允许 @ * 等特殊符号)"
 else
     log_fail "密码验证逻辑不符合预期"
 fi
@@ -239,7 +239,7 @@ log_info "第 9 阶段：文档完整性检查..."
 if [ -f "$SCRIPT_DIR/README.md" ]; then
     log_pass "README.md 存在"
     
-    if grep -q "特殊符号\|URI 结构字符\|允许包含特殊" "$SCRIPT_DIR/README.md"; then
+    if grep -q "特殊符号.*@\|允许.*@\|@.*\*" "$SCRIPT_DIR/README.md"; then
         log_pass "README 文档密码说明与实际逻辑一致"
     else
         log_fail "README 文档密码说明与实际逻辑不一致"

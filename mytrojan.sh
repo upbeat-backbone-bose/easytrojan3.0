@@ -21,16 +21,16 @@ check_root() {
     fi
 }
 
-# Validate password format (allow special characters, exclude URI structural characters)
+# Validate password format (allow special characters including @ and *, exclude URI structural characters)
 validate_password() {
     local passwd="$1"
     if [ -z "$passwd" ]; then
         echo "Error: Password must not be empty" >&2
         return 1
     fi
-    # Exclude URI structural characters: : @ / ? & = # and whitespace
-    if echo "$passwd" | grep -qE '[:@/?&#=]|[[:space:]]'; then
-        echo "Error: Password cannot contain special URI characters: : @ / ? & = # or whitespace" >&2
+    # Exclude URI structural characters: / ? = # and whitespace (but allow @ for backward compatibility)
+    if echo "$passwd" | grep -qE '[/?=#]|[[:space:]]'; then
+        echo "Error: Password cannot contain special URI characters: / ? = # or whitespace" >&2
         return 1
     fi
     return 0
