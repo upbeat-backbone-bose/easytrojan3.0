@@ -17,19 +17,19 @@ echo "[1/8] Syntax validation..."
 bash -n "$PROJECT_ROOT/easytrojan.sh" && echo "  ✓ easytrojan.sh syntax OK"
 bash -n "$PROJECT_ROOT/mytrojan.sh" && echo "  ✓ mytrojan.sh syntax OK"
 
-# Test 2: Password regex pattern
-echo "[2/8] Password validation regex..."
-if grep -qE '\^\[a-zA-Z0-9_\]\+\$' "$PROJECT_ROOT/easytrojan.sh"; then
-    echo "  ✓ easytrojan.sh password regex OK"
+# Test 2: Password URI character check
+echo "[2/8] Password validation URI character check..."
+if grep -F '[/?=#]' "$PROJECT_ROOT/easytrojan.sh" >/dev/null; then
+    echo "  ✓ easytrojan.sh password validation OK"
 else
-    echo "  ✗ easytrojan.sh password regex FAIL"
+    echo "  ✗ easytrojan.sh password validation FAIL"
     exit 1
 fi
 
-if grep -qE '\^\[a-zA-Z0-9_\]\+\$' "$PROJECT_ROOT/mytrojan.sh"; then
-    echo "  ✓ mytrojan.sh password regex OK"
+if grep -F '[/?=#]' "$PROJECT_ROOT/mytrojan.sh" >/dev/null; then
+    echo "  ✓ mytrojan.sh password validation OK"
 else
-    echo "  ✗ mytrojan.sh password regex FAIL"
+    echo "  ✗ mytrojan.sh password validation FAIL"
     exit 1
 fi
 
@@ -98,7 +98,7 @@ fi
 
 # Test 8: Documentation
 echo "[8/8] Documentation..."
-if grep -qE "密码仅限使用字母.*数字.*下划线" "$PROJECT_ROOT/README.md"; then
+if grep -qE "密码允许包含特殊符号|@.*\*|URI 结构字符" "$PROJECT_ROOT/README.md"; then
     echo "  ✓ README password policy documented"
 else
     echo "  ✗ README password policy documentation missing"
