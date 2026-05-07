@@ -37,6 +37,11 @@ jobs:
           go-version: '1.26'
           cache: true
 
+      - name: Run tests
+        run: |
+          chmod +x tests/test_all.sh
+          bash tests/test_all.sh
+
       - name: Install xcaddy
         run: |
           curl -L "https://github.com/caddyserver/xcaddy/releases/download/v0.4.5/xcaddy_0.4.5_linux_amd64.tar.gz" -o xcaddy.tar.gz
