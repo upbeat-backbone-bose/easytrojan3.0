@@ -16,13 +16,15 @@
 
 ## 🔧 依赖类型
 
+## 🔧 依赖类型
+
 ### GitHub Actions
 项目使用以下 GitHub Actions：
 
 | Action | 版本 | 用途 |
 |--------|------|------|
 | actions/checkout | v6.0.2 | 代码检出 |
-| actions/setup-go | v6.4.0 | Go 环境设置 (仅用于 xcaddy) |
+| actions/setup-go | v6.4.0 | **Go 环境 (仅用于 xcaddy 构建)** |
 | actions/cache | v5.0.5 | xcaddy 缓存 |
 | actions/upload-artifact | v7.0.1 | 构建产物上传 |
 | actions/download-artifact | v8.0.1 | 构建产物下载 |
@@ -35,6 +37,9 @@
 - 版本：v0.4.5 (固定)
 - 用途：构建包含 caddy-trojan 插件的 Caddy
 - 位置：仅在 CI/CD 中使用
+- **依赖**: 需要 Go 编译环境 (由 setup-go 提供)
+
+> ⚠️ **重要**: 虽然项目本身是纯 Shell 脚本，但 xcaddy 在构建 Caddy 时需要调用 Go 编译器，因此 CI 中必须安装 Go 环境。
 
 ### 系统依赖（运行环境）
 - curl
