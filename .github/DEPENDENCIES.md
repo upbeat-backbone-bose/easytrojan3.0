@@ -15,7 +15,7 @@
 | actions/upload-artifact | v7.0.1 | 构建产物上传 |
 | actions/download-artifact | v8.0.1 | 构建产物下载 |
 | softprops/action-gh-release | v3.0.0 | GitHub Release 发布 |
-| ludeeus/action-shellcheck | v2.0.0 | Shell 脚本静态分析 |
+| ludeeus/action-shellcheck | 2.0.0 | Shell 脚本静态分析 |
 
 ### Go 语言依赖
 主要依赖通过 xcaddy 构建时自动获取：
