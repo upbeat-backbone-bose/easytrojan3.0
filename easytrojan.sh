@@ -240,9 +240,8 @@ validate_password "$trojan_passwd"
 address_ip=$(curl -s -4 ipv4.ip.sb 2>/dev/null)
 [ -z "$address_ip" ] && log_error "Failed to get server IP address"
 
-# Generate default domain from IP
-long_number=$(echo "$address_ip" | awk -F. '{printf "%u\n", $4 * 256^3 + $3 * 256^2 + $2 * 256 + $1}')
-nip_domain="ip${long_number}.mobgslb.tbcache.com"
+# Generate default domain from IP (nip.io wildcard DNS)
+nip_domain="${address_ip}.nip.io"
 
 # Generate trojan connection link
 trojan_link="trojan://$(url_encode "$trojan_passwd")@${address_ip}:443?security=tls&sni=${nip_domain}&alpn=h2%2Chttp%2F1.1&fp=chrome&type=tcp#easytrojan-${address_ip}"
@@ -306,7 +305,7 @@ cat > "$CADDY_CONFIG_DIR/Caddyfile" <<EOF
     }
 }
 :443, $nip_domain {
-    tls $address_ip@tbcache.com {
+    tls $address_ip@example.com {
         ciphers TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
     }
     log {

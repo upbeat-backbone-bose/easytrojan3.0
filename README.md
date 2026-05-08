@@ -99,11 +99,13 @@ systemctl stop caddy.service && systemctl disable caddy.service && rm -rf /etc/c
 
 ### 免费域名
 
-通过 tbcache.com 提供的免费域名解析服务获取，例如：
+通过 nip.io 提供的免费泛域名解析服务自动获取，格式为 `<IP>.nip.io`，例如：
 
 ```
-ip518200520.mobgslb.tbcache.com
+1.3.5.7.nip.io
 ```
+
+> nip.io 会将 `<IP>.nip.io` 自动解析到对应的 `<IP>` 地址，无需任何配置
 
 ### 指定域名
 
@@ -148,7 +150,7 @@ sudo ufw disable
 
 IP 为 1.3.5.7 密码为 123456 的服务器示例：
 
-- **地址**：`ip***.mobgslb.tbcache.com`（根据服务器 IP 生成，即免费域名）
+- **地址**：`<IP>.nip.io`（根据服务器 IP 自动生成，即免费域名）
 - **端口**：443
 - **密码**：123456（安装时设置的密码）
 - **ALPN**: h2/http1.1
